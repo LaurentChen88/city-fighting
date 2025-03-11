@@ -20,16 +20,18 @@ Détails : https://fxjollois.github.io/cours-2024-2025/but3--vcod--fa--sae-final
     git clone https://github.com/LaurentChen88/city-fighting.git
     ```
 2. Crée un environnement :
+   
    Sous VS Code, View > Command Palette > Python: Create Environment > Venv
-3. Active l'environnement :
+   
+4. Active l'environnement :
    ```bash
    .\venv\Scripts\activate
    ```
-4. Installe les dépendances :
+5. Installe les dépendances :
     ```bash
     pip install -r requirements.txt
     ```
-5. Démarrer le projet :
+6. Démarrer le projet :
    ```bash
    streamlit run app.py
    ```
