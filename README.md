@@ -42,4 +42,4 @@ Détails : https://fxjollois.github.io/cours-2024-2025/but3--vcod--fa--sae-final
 - Mohammed BOUKOUIREN
 - Furkan NARIN
 
-  3A VCOD GRP 33
+  3FA VCOD GRP 33
