@@ -5,6 +5,7 @@ SAE Outils Décisionnels S6 : développer une inteface web permettant la compara
 - [Description](#description)
 - [Prérequis](#prérequis)
 - [Installation](#installation)
+- [Sources](#sources)
 - [Auteurs](#auteurs)
 
 ## Description
@@ -35,6 +36,12 @@ Détails : https://fxjollois.github.io/cours-2024-2025/but3--vcod--fa--sae-final
    ```bash
    streamlit run app.py
    ```
+
+## Sources
+- Données générales :
+- Emploi : https://api.gouv.fr/guides/guide-api-statistiques#%F0%9F%91%A9%F0%9F%8F%BD%E2%80%8D%F0%9F%92%BB-les-api-sur-l'emploi
+- Logement :
+- Météo (climat à l’année + météo des prochains jours) : 
 
 ## Auteurs
 - Laurent CHEN
