@@ -6,6 +6,8 @@ st.set_page_config(
     layout="centered"             # "wide" pour une mise en page large
 )
 
-streamlit.write("""
+st.write("""
 # City Fighting
 """)
+
+
