@@ -44,7 +44,6 @@ try:
 
         with col_left:
             st.markdown(f"### {ville_1}")
-            # Conversion des valeurs en nombres, avec gestion des erreurs
             population_1 = pd.to_numeric(data_1["Population en 2021"], errors='coerce')
             if not pd.isna(population_1):
                 st.metric("Population 2021", int(population_1))
@@ -113,7 +112,6 @@ try:
 
         with col_right:
             st.markdown(f"### {ville_2}")
-            # Conversion des valeurs en nombres, avec gestion des erreurs
             population_2 = pd.to_numeric(data_2["Population en 2021"], errors='coerce')
             if not pd.isna(population_2):
                 st.metric("Population 2021", int(population_2))
@@ -215,7 +213,7 @@ try:
         )
         st.plotly_chart(fig, use_container_width=True)
 
-        # Compteur des variables supérieures (seulement pour les variables positives)
+        # Compteur des variables supérieures
         positive_variables = [
             "Population en 2021",
             "Logements en 2021",
@@ -236,15 +234,26 @@ try:
     # Onglet Ville 1
     with tab2:
         st.header(f"📍 Informations détaillées : {ville_1}")
+        wiki_url_1 = f"https://fr.wikipedia.org/wiki/{ville_1.replace(' ', '_')}"
+        st.markdown(f"🔗 [Page Wikipédia de {ville_1}]({wiki_url_1})")
 
-        # Carte
         if "latitude" in data_1 and "longitude" in data_1:
             m = folium.Map(location=[data_1["latitude"], data_1["longitude"]], zoom_start=12)
             folium.Marker(
                 location=[data_1["latitude"], data_1["longitude"]],
                 popup=ville_1,
                 tooltip=ville_1,
+                icon=folium.Icon(color="blue")
             ).add_to(m)
+
+            if "latitude_gare" in data_1 and "longitude_gare" in data_1 and not pd.isna(data_1["latitude_gare"]) and not pd.isna(data_1["longitude_gare"]):
+                folium.Marker(
+                    location=[data_1["latitude_gare"], data_1["longitude_gare"]],
+                    popup=f"Gare de {ville_1}",
+                    tooltip=f"Gare de {ville_1}",
+                    icon=folium.Icon(color="red")
+                ).add_to(m)
+
             st_folium(m, width=700, height=400)
         else:
             st.warning("Données géographiques manquantes pour cette ville.")
@@ -271,15 +280,26 @@ try:
     # Onglet Ville 2
     with tab3:
         st.header(f"📍 Informations détaillées : {ville_2}")
+        wiki_url_2 = f"https://fr.wikipedia.org/wiki/{ville_2.replace(' ', '_')}"
+        st.markdown(f"🔗 [Page Wikipédia de {ville_2}]({wiki_url_2})")
 
-        # Carte
         if "latitude" in data_2 and "longitude" in data_2:
             m = folium.Map(location=[data_2["latitude"], data_2["longitude"]], zoom_start=12)
             folium.Marker(
                 location=[data_2["latitude"], data_2["longitude"]],
                 popup=ville_2,
                 tooltip=ville_2,
+                icon=folium.Icon(color="blue")
             ).add_to(m)
+
+            if "latitude_gare" in data_2 and "longitude_gare" in data_2 and not pd.isna(data_2["latitude_gare"]) and not pd.isna(data_2["longitude_gare"]):
+                folium.Marker(
+                    location=[data_2["latitude_gare"], data_2["longitude_gare"]],
+                    popup=f"Gare de {ville_2}",
+                    tooltip=f"Gare de {ville_2}",
+                    icon=folium.Icon(color="red")
+                ).add_to(m)
+
             st_folium(m, width=700, height=400)
         else:
             st.warning("Données géographiques manquantes pour cette ville.")

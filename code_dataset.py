@@ -30,7 +30,7 @@ df_jointure.to_excel("data/data_final.xlsx", index=False)
 
 df_csv2 = pd.read_csv("data/gares-de-voyageurs.csv")
 # Renommer la colonne pour correspondre
-df_csv2_rename = df_csv2.rename(columns={'CODGEO': 'code_commune_INSEE'})
+df_csv2 = df_csv2.rename(columns={'CODGEO': 'code_commune_INSEE'})
 
 print("La base de gare ==========>")
-print(df_csv2_rename.head())
+print(df_csv2.head())
