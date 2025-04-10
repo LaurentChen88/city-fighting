@@ -3,6 +3,37 @@ import pandas as pd
 import plotly.express as px
 import folium
 from streamlit_folium import st_folium
+import requests
+
+# Fonction pour obtenir la météo
+def get_weather(city_name, api_key):
+    url = "https://api.openweathermap.org/data/2.5/weather"
+    params = {
+        'q': city_name,
+        'appid': api_key,
+        'units': 'metric',
+        'lang': 'fr'
+    }
+
+    try:
+        response = requests.get(url, params=params)
+        response.raise_for_status()  # Déclenche une erreur si le code HTTP est 4xx/5xx
+        data = response.json()
+
+        if "main" in data and "weather" in data:
+            st.write(f"📍 Météo à {data['name']}")
+            st.write(f"🌡️ Température : {data['main']['temp']}°C")
+            st.write(f"🤔 Ressentie : {data['main']['feels_like']}°C")
+            st.write(f"🌤️ Conditions : {data['weather'][0]['description']}")
+        else:
+            st.write("⚠️ Données météo incomplètes.")
+
+    except requests.exceptions.HTTPError as err:
+        st.write("❌ Erreur HTTP :", err)
+    except requests.exceptions.RequestException as err:
+        st.write("❌ Erreur de requête :", err)
+    except Exception as e:
+        st.write("❌ Erreur inattendue :", e)
 
 # Configuration de la page
 st.set_page_config(
@@ -15,13 +46,19 @@ st.title("🏙️ Comparateur de deux villes")
 
 # Chargement des données
 file_path = "data/data_final.xlsx"
+etablissement_path = "data/etablissement2.csv"
 
 @st.cache_data
 def load_data(path):
     return pd.read_excel(path)
 
+@st.cache_data
+def load_etablissement_data(path):
+    return pd.read_csv(path)
+
 try:
     df = load_data(file_path)
+    df_etablissement = load_etablissement_data(etablissement_path)
 
     # Sélection des villes
     villes = sorted(df["Libellé commune ou ARM"].unique())
@@ -237,6 +274,10 @@ try:
         wiki_url_1 = f"https://fr.wikipedia.org/wiki/{ville_1.replace(' ', '_')}"
         st.markdown(f"🔗 [Page Wikipédia de {ville_1}]({wiki_url_1})")
 
+        # Afficher la météo pour la ville 1
+        st.subheader("Météo actuelle")
+        get_weather(ville_1, "6aea17a766b369d16fdcf84a0b16fdac")
+
         if "latitude" in data_1 and "longitude" in data_1:
             m = folium.Map(location=[data_1["latitude"], data_1["longitude"]], zoom_start=12)
             folium.Marker(
@@ -277,11 +318,20 @@ try:
         st.write(f"- Taux de pauvreté : {data_1['Taux de pauvreté en 2021']} %")
         st.write(f"- Niveau de vie médian : {data_1['Médiane du niveau vie en 2021']} €")
 
+        # Afficher les écoles pour la ville 1
+        st.write("### Établissements scolaires")
+        ecoles_ville_1 = df_etablissement[df_etablissement['Région'] == data_1['Région']]
+        st.dataframe(ecoles_ville_1)
+
     # Onglet Ville 2
     with tab3:
         st.header(f"📍 Informations détaillées : {ville_2}")
         wiki_url_2 = f"https://fr.wikipedia.org/wiki/{ville_2.replace(' ', '_')}"
         st.markdown(f"🔗 [Page Wikipédia de {ville_2}]({wiki_url_2})")
+
+        # Afficher la météo pour la ville 2
+        st.subheader("Météo actuelle")
+        get_weather(ville_2, "6aea17a766b369d16fdcf84a0b16fdac")
 
         if "latitude" in data_2 and "longitude" in data_2:
             m = folium.Map(location=[data_2["latitude"], data_2["longitude"]], zoom_start=12)
@@ -323,7 +373,12 @@ try:
         st.write(f"- Taux de pauvreté : {data_2['Taux de pauvreté en 2021']} %")
         st.write(f"- Niveau de vie médian : {data_2['Médiane du niveau vie en 2021']} €")
 
+        # Afficher les écoles pour la ville 2
+        st.write("### Établissements scolaires")
+        ecoles_ville_2 = df_etablissement[df_etablissement['Région'] == data_2['Région']]
+        st.dataframe(ecoles_ville_2)
+
 except FileNotFoundError:
-    st.error("❌ Fichier non trouvé : `data/data_final.xlsx`")
+    st.error("❌ Fichier non trouvé : data/data_final.xlsx ou data/etablissement.csv")
 except Exception as e:
     st.error(f"❌ Erreur : {e}")
