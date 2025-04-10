@@ -4,6 +4,11 @@ import plotly.express as px
 import folium
 from streamlit_folium import st_folium
 import requests
+from geopy.geocoders import Nominatim # Pour récupérer les coordonnées (longitude et latitude) des villes 
+
+
+# Initialisation du géolocaliseur
+geolocator = Nominatim(user_agent="mon_application")
 
 # Fonction pour obtenir la météo
 def get_weather(city_name, api_key):
@@ -56,10 +61,24 @@ def load_data(path):
 def load_etablissement_data(path):
     return pd.read_csv(path)
 
+# Fonction pour récupérer la latitude et longitude
+def get_coordinates(city_name):
+    try:
+        location = geolocator.geocode(city_name)
+        if location:
+            return location.latitude, location.longitude
+        else:
+            return None, None
+    except Exception as e:
+        print(f"Erreur lors de la récupération des coordonnées pour {city_name}: {e}")
+        return None, None
+
 try:
     df = load_data(file_path)
     df_etablissement = load_etablissement_data(etablissement_path)
 
+    # Enlever les doublons basés sur 'code_commune_INSEE'
+    df = df.drop_duplicates(subset='code_commune_INSEE')
     # Sélection des villes
     villes = sorted(df["Libellé commune ou ARM"].unique())
     col1, col2 = st.columns(2)
@@ -67,9 +86,24 @@ try:
         ville_1 = st.selectbox("📍 Sélectionnez la première ville :", villes)
     with col2:
         ville_2 = st.selectbox("🏙️ Sélectionnez la deuxième ville :", villes, index=1)
-
     data_1 = df[df["Libellé commune ou ARM"] == ville_1].squeeze()
     data_2 = df[df["Libellé commune ou ARM"] == ville_2].squeeze()
+
+    # Vérifier si les coordonnées manquent et les récupérer si nécessaire pour data_1
+    if pd.isna(data_1['longitude']) or pd.isna(data_1['latitude']):
+        city_name = ville_1  # Ou utiliser 'code_commune_INSEE' si tu préfères
+        latitude, longitude = get_coordinates(city_name)
+        if latitude is not None and longitude is not None:
+            data_1['latitude'] = latitude
+            data_1['longitude'] = longitude
+
+    # Vérifier si les coordonnées manquent et les récupérer si nécessaire pour data_2
+    if pd.isna(data_2['longitude']) or pd.isna(data_2['latitude']):
+        city_name = ville_2  # Ou utiliser 'code_commune_INSEE' si tu préfères
+        latitude, longitude = get_coordinates(city_name)
+        if latitude is not None and longitude is not None:
+            data_2['latitude'] = latitude
+            data_2['longitude'] = longitude
 
     # Onglets
     tab1, tab2, tab3 = st.tabs(["🔍 Comparatif global", f"🏘️ {ville_1}", f"🏘️ {ville_2}"])
