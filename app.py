@@ -92,7 +92,7 @@ try:
             
             # Renommer chaque ligne en ajoutant le code INSEE à la ville
             for idx, row in city_rows.iterrows():
-                df.at[idx, "Libellé commune ou ARM"] = f"{row['Libellé commune ou ARM']} {row['Département']}"
+                df.at[idx, "Libellé commune ou ARM"] = f"{row['Libellé commune ou ARM']} ({row['Département']})"
 
     # Sélection des villes
     villes = sorted(df["Libellé commune ou ARM"].unique())
