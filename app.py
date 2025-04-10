@@ -11,10 +11,11 @@ from geopy.geocoders import Nominatim # Pour récupérer les coordonnées (longi
 geolocator = Nominatim(user_agent="mon_application")
 
 # Fonction pour obtenir la météo
-def get_weather(city_name, api_key):
+def get_weather(lat, lon, api_key):
     url = "https://api.openweathermap.org/data/2.5/weather"
     params = {
-        'q': city_name,
+        'lat': lat,  # Latitude
+        'lon': lon,  # Longitude
         'appid': api_key,
         'units': 'metric',
         'lang': 'fr'
@@ -79,6 +80,20 @@ try:
 
     # Enlever les doublons basés sur 'code_commune_INSEE'
     df = df.drop_duplicates(subset='code_commune_INSEE')
+
+    # Créer un dictionnaire pour compter les occurrences des villes
+    city_counts = df["Libellé commune ou ARM"].value_counts()
+    
+    # Renommer les villes si elles apparaissent plusieurs fois
+    for city, count in city_counts.items():
+        if count > 1:
+            # Filtrer les villes avec le même nom
+            city_rows = df[df["Libellé commune ou ARM"] == city]
+            
+            # Renommer chaque ligne en ajoutant le code INSEE à la ville
+            for idx, row in city_rows.iterrows():
+                df.at[idx, "Libellé commune ou ARM"] = f"{row['Libellé commune ou ARM']} {row['Département']}"
+
     # Sélection des villes
     villes = sorted(df["Libellé commune ou ARM"].unique())
     col1, col2 = st.columns(2)
@@ -310,7 +325,7 @@ try:
 
         # Afficher la météo pour la ville 1
         st.subheader("Météo actuelle")
-        get_weather(ville_1, "6aea17a766b369d16fdcf84a0b16fdac")
+        get_weather(data_1['latitude'], data_1['longitude'], "6aea17a766b369d16fdcf84a0b16fdac")
 
         if "latitude" in data_1 and "longitude" in data_1:
             m = folium.Map(location=[data_1["latitude"], data_1["longitude"]], zoom_start=12)
@@ -365,7 +380,7 @@ try:
 
         # Afficher la météo pour la ville 2
         st.subheader("Météo actuelle")
-        get_weather(ville_2, "6aea17a766b369d16fdcf84a0b16fdac")
+        get_weather(data_2['latitude'], data_2['longitude'], "6aea17a766b369d16fdcf84a0b16fdac")
 
         if "latitude" in data_2 and "longitude" in data_2:
             m = folium.Map(location=[data_2["latitude"], data_2["longitude"]], zoom_start=12)
