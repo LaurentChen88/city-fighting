@@ -1,40 +1,38 @@
 import requests
 
-def get_navitia_stops(city_name, api_key, lon, lat, distance=500):
-    url = "https://api.navitia.io/v1/coverage/fr-idf/places"
+def get_city_photos(city_name, api_key):
+    url = f"https://api.unsplash.com/search/photos"
     params = {
-        'q': f"coord:{lon}:{lat}",
-        'type[]': 'stop_point',
-        'distance': distance,
-        'count': 10
-    }
-    headers = {
-        'Authorization': api_key
+        'query': city_name,
+        'client_id': api_key,
+        'per_page': 5  # Nombre d'images à récupérer
     }
 
     try:
-        response = requests.get(url, headers=headers, params=params)
-        response.raise_for_status()  # Vérifie les erreurs HTTP
+        response = requests.get(url, params=params)
+        response.raise_for_status()  # Déclenche une erreur si le code HTTP est 4xx/5xx
         data = response.json()
 
-        if 'places' in data:
-            print(f"Arrêts de transport à proximité de {city_name} :")
-            for place in data['places']:
-                print(f"- {place['name']} (Distance : {place['distance']} m)")
+        if "results" in data:
+            print(f"📸 Photos de {city_name}:")
+            for index, photo in enumerate(data["results"]):
+                print(f"Photo {index + 1}:")
+                print(f"URL de l'image: {photo['urls']['regular']}")
+                print(f"Photographe: {photo['user']['name']}")
+                print(f"Description: {photo['alt_description']}")
+                print("-" * 50)
         else:
-            print("Aucun arrêt trouvé.")
+            print(f"⚠️ Aucune photo trouvée pour {city_name}.")
 
     except requests.exceptions.HTTPError as err:
-        print("Erreur HTTP :", err)
+        print("❌ Erreur HTTP :", err)
     except requests.exceptions.RequestException as err:
-        print("Erreur de requête :", err)
+        print("❌ Erreur de requête :", err)
     except Exception as e:
-        print("Erreur inattendue :", e)
+        print("❌ Erreur inattendue :", e)
 
-# Exemple d'utilisation
-API_KEY = "VOTRE_CLE_API_NAVITIA"
-VILLE = "Paris"
-LON = 2.3522  # Longitude de Paris
-LAT = 48.8566  # Latitude de Paris
+# Ta clé API Unsplash
+API_KEY = "2_paTq4anmtqT_ZY38WLHENxJ9hP_EhcJsWI8kxGTO8"
+ville = "Paris"  # Remplace "Paris" par la ville de ton choix
 
-get_navitia_stops(VILLE, API_KEY, LON, LAT)
+get_city_photos(ville, API_KEY)
