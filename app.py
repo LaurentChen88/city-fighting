@@ -326,27 +326,6 @@ try:
         st.subheader("Météo actuelle")
         get_weather(data_1['latitude'], data_1['longitude'], "6aea17a766b369d16fdcf84a0b16fdac")
 
-        if "latitude" in data_1 and "longitude" in data_1:
-            m = folium.Map(location=[data_1["latitude"], data_1["longitude"]], zoom_start=12)
-            folium.Marker(
-                location=[data_1["latitude"], data_1["longitude"]],
-                popup=ville_1,
-                tooltip=ville_1,
-                icon=folium.Icon(color="blue")
-            ).add_to(m)
-
-            if "latitude_gare" in data_1 and "longitude_gare" in data_1 and not pd.isna(data_1["latitude_gare"]) and not pd.isna(data_1["longitude_gare"]):
-                folium.Marker(
-                    location=[data_1["latitude_gare"], data_1["longitude_gare"]],
-                    popup=f"Gare de {ville_1}",
-                    tooltip=f"Gare de {ville_1}",
-                    icon=folium.Icon(color="red")
-                ).add_to(m)
-
-            st_folium(m, width=700, height=400)
-        else:
-            st.warning("Données géographiques manquantes pour cette ville.")
-
         st.write("### Démographie")
         st.write(f"- Population 2021 : {int(pd.to_numeric(data_1['Population en 2021'], errors='coerce'))}")
         st.write(f"- Naissances 2015-2020 : {data_1['Naissances entre 2015 et 2020']}")
@@ -369,20 +348,26 @@ try:
         # Afficher les écoles pour la ville 1
         st.write("### Établissements scolaires")
         ecoles_ville_1 = df_etablissement[df_etablissement['Numéro Région'] == data_1['Région']]
-        st.dataframe(ecoles_ville_1)
 
-        # Afficher la carte des écoles pour la ville 1
-        if not ecoles_ville_1.empty:
-            m_ecoles = folium.Map(location=[ecoles_ville_1.iloc[0]['latitude_ecole'], ecoles_ville_1.iloc[0]['longitude_ecole']], zoom_start=12)
+        # Bouton radio pour choisir entre la carte et le tableau des écoles
+        view_option_ecoles_1 = st.radio("Choisissez l'affichage des écoles :", ("Carte", "Tableau"), key="view_option_ecoles_1")
 
-            for _, ecole in ecoles_ville_1.iterrows():
-                folium.Marker(
-                    location=[ecole['latitude_ecole'], ecole['longitude_ecole']],
-                    popup=ecole['libellé'],  # Remplacez par le nom de la colonne contenant le nom de l'école
-                    icon=folium.Icon(color="green")
-                ).add_to(m_ecoles)
+        if view_option_ecoles_1 == "Carte":
+            if not ecoles_ville_1.empty:
+                m_ecoles = folium.Map(location=[ecoles_ville_1.iloc[0]['latitude_ecole'], ecoles_ville_1.iloc[0]['longitude_ecole']], zoom_start=12)
 
-            st_folium(m_ecoles, width=700, height=500)
+                for _, ecole in ecoles_ville_1.iterrows():
+                    folium.Marker(
+                        location=[ecole['latitude_ecole'], ecole['longitude_ecole']],
+                        popup=ecole['libellé'],  # Remplacez par le nom de la colonne contenant le nom de l'école
+                        icon=folium.Icon(color="green")
+                    ).add_to(m_ecoles)
+
+                st_folium(m_ecoles, width=700, height=500)
+            else:
+                st.warning("Aucune école trouvée pour cette ville.")
+        else:
+            st.dataframe(ecoles_ville_1)
 
     # Onglet Ville 2
     with tab3:
@@ -393,27 +378,6 @@ try:
         # Afficher la météo pour la ville 2
         st.subheader("Météo actuelle")
         get_weather(data_2['latitude'], data_2['longitude'], "6aea17a766b369d16fdcf84a0b16fdac")
-
-        if "latitude" in data_2 and "longitude" in data_2:
-            m = folium.Map(location=[data_2["latitude"], data_2["longitude"]], zoom_start=12)
-            folium.Marker(
-                location=[data_2["latitude"], data_2["longitude"]],
-                popup=ville_2,
-                tooltip=ville_2,
-                icon=folium.Icon(color="blue")
-            ).add_to(m)
-
-            if "latitude_gare" in data_2 and "longitude_gare" in data_2 and not pd.isna(data_2["latitude_gare"]) and not pd.isna(data_2["longitude_gare"]):
-                folium.Marker(
-                    location=[data_2["latitude_gare"], data_2["longitude_gare"]],
-                    popup=f"Gare de {ville_2}",
-                    tooltip=f"Gare de {ville_2}",
-                    icon=folium.Icon(color="red")
-                ).add_to(m)
-
-            st_folium(m, width=700, height=400)
-        else:
-            st.warning("Données géographiques manquantes pour cette ville.")
 
         st.write("### Démographie")
         st.write(f"- Population 2021 : {int(pd.to_numeric(data_2['Population en 2021'], errors='coerce'))}")
@@ -437,20 +401,26 @@ try:
         # Afficher les écoles pour la ville 2
         st.write("### Établissements scolaires")
         ecoles_ville_2 = df_etablissement[df_etablissement['Numéro Région'] == data_2['Région']]
-        st.dataframe(ecoles_ville_2)
 
-        # Afficher la carte des écoles pour la ville 2
-        if not ecoles_ville_2.empty:
-            m_ecoles = folium.Map(location=[ecoles_ville_2.iloc[0]['latitude_ecole'], ecoles_ville_2.iloc[0]['longitude_ecole']], zoom_start=12)
+        # Bouton radio pour choisir entre la carte et le tableau des écoles
+        view_option_ecoles_2 = st.radio("Choisissez l'affichage des écoles :", ("Carte", "Tableau"), key="view_option_ecoles_2")
 
-            for _, ecole in ecoles_ville_2.iterrows():
-                folium.Marker(
-                    location=[ecole['latitude_ecole'], ecole['longitude_ecole']],
-                    popup=ecole['libellé'],  # Remplacez par le nom de la colonne contenant le nom de l'école
-                    icon=folium.Icon(color="green")
-                ).add_to(m_ecoles)
+        if view_option_ecoles_2 == "Carte":
+            if not ecoles_ville_2.empty:
+                m_ecoles = folium.Map(location=[ecoles_ville_2.iloc[0]['latitude_ecole'], ecoles_ville_2.iloc[0]['longitude_ecole']], zoom_start=12)
 
-            st_folium(m_ecoles, width=700, height=500)
+                for _, ecole in ecoles_ville_2.iterrows():
+                    folium.Marker(
+                        location=[ecole['latitude_ecole'], ecole['longitude_ecole']],
+                        popup=ecole['libellé'],  # Remplacez par le nom de la colonne contenant le nom de l'école
+                        icon=folium.Icon(color="green")
+                    ).add_to(m_ecoles)
+
+                st_folium(m_ecoles, width=700, height=500)
+            else:
+                st.warning("Aucune école trouvée pour cette ville.")
+        else:
+            st.dataframe(ecoles_ville_2)
 
 except FileNotFoundError:
     st.error("❌ Fichier non trouvé : data/data_final.xlsx ou data/etablissement.csv")
