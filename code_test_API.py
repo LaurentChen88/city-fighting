@@ -36,3 +36,5 @@ API_KEY = "2_paTq4anmtqT_ZY38WLHENxJ9hP_EhcJsWI8kxGTO8"
 ville = "Paris"  # Remplace "Paris" par la ville de ton choix
 
 get_city_photos(ville, API_KEY)
+
+ 
