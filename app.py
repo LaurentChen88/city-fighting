@@ -326,6 +326,28 @@ try:
         st.subheader("Météo actuelle")
         get_weather(data_1['latitude'], data_1['longitude'], "6aea17a766b369d16fdcf84a0b16fdac")
 
+        # Afficher la carte pour localiser la ville 1
+        if "latitude" in data_1 and "longitude" in data_1:
+            m = folium.Map(location=[data_1["latitude"], data_1["longitude"]], zoom_start=12)
+            folium.Marker(
+                location=[data_1["latitude"], data_1["longitude"]],
+                popup=ville_1,
+                tooltip=ville_1,
+                icon=folium.Icon(color="blue")
+            ).add_to(m)
+
+            if "latitude_gare" in data_1 and "longitude_gare" in data_1 and not pd.isna(data_1["latitude_gare"]) and not pd.isna(data_1["longitude_gare"]):
+                folium.Marker(
+                    location=[data_1["latitude_gare"], data_1["longitude_gare"]],
+                    popup=f"Gare de {ville_1}",
+                    tooltip=f"Gare de {ville_1}",
+                    icon=folium.Icon(color="red")
+                ).add_to(m)
+
+            st_folium(m, width=700, height=400)
+        else:
+            st.warning("Données géographiques manquantes pour cette ville.")
+
         st.write("### Démographie")
         st.write(f"- Population 2021 : {int(pd.to_numeric(data_1['Population en 2021'], errors='coerce'))}")
         st.write(f"- Naissances 2015-2020 : {data_1['Naissances entre 2015 et 2020']}")
@@ -378,6 +400,28 @@ try:
         # Afficher la météo pour la ville 2
         st.subheader("Météo actuelle")
         get_weather(data_2['latitude'], data_2['longitude'], "6aea17a766b369d16fdcf84a0b16fdac")
+
+        # Afficher la carte pour localiser la ville 2
+        if "latitude" in data_2 and "longitude" in data_2:
+            m = folium.Map(location=[data_2["latitude"], data_2["longitude"]], zoom_start=12)
+            folium.Marker(
+                location=[data_2["latitude"], data_2["longitude"]],
+                popup=ville_2,
+                tooltip=ville_2,
+                icon=folium.Icon(color="blue")
+            ).add_to(m)
+
+            if "latitude_gare" in data_2 and "longitude_gare" in data_2 and not pd.isna(data_2["latitude_gare"]) and not pd.isna(data_2["longitude_gare"]):
+                folium.Marker(
+                    location=[data_2["latitude_gare"], data_2["longitude_gare"]],
+                    popup=f"Gare de {ville_2}",
+                    tooltip=f"Gare de {ville_2}",
+                    icon=folium.Icon(color="red")
+                ).add_to(m)
+
+            st_folium(m, width=700, height=400)
+        else:
+            st.warning("Données géographiques manquantes pour cette ville.")
 
         st.write("### Démographie")
         st.write(f"- Population 2021 : {int(pd.to_numeric(data_2['Population en 2021'], errors='coerce'))}")
