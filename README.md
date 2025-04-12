@@ -26,7 +26,7 @@ Détails : https://fxjollois.github.io/cours-2024-2025/but3--vcod--fa--sae-final
    
 4. Active l'environnement :
    ```bash
-   .\venv\Scripts\activate
+   .venv/Scripts/activate
    ```
 5. Installe les dépendances :
     ```bash
