@@ -5,11 +5,13 @@ import folium
 from streamlit_folium import st_folium
 import requests
 from geopy.geocoders import Nominatim
+from folium.plugins import MarkerCluster
 
 # Initialisation du géolocaliseur
 geolocator = Nominatim(user_agent="mon_application")
 
 # Fonction pour obtenir la météo
+@st.cache_data # Cachez les résultats des appels API avec @st.cache_data pour éviter de refaire les mêmes requêtes à chaque exécution
 def get_weather(lat, lon, api_key):
     url = "https://api.openweathermap.org/data/2.5/weather"
     params = {
@@ -41,6 +43,7 @@ def get_weather(lat, lon, api_key):
         st.write("❌ Erreur inattendue :", e)
 
 # Fonction pour récupérer les données des gares à l'aide de l'API Overpass
+@st.cache_data
 def get_gares_data(bbox):
     overpass_url = "http://overpass-api.de/api/interpreter"
     overpass_query = f"""
@@ -61,6 +64,7 @@ def get_gares_data(bbox):
         return None
 
 # Fonction pour récupérer les données des musées à l'aide de l'API Overpass
+@st.cache_data
 def get_musees_data(bbox):
     overpass_url = "http://overpass-api.de/api/interpreter"
     overpass_query = f"""
@@ -81,6 +85,7 @@ def get_musees_data(bbox):
         return None
 
 # Fonction pour récupérer les données des restaurants à l'aide de l'API Overpass
+@st.cache_data
 def get_restaurants_data(bbox):
     overpass_url = "http://overpass-api.de/api/interpreter"
     overpass_query = f"""
@@ -99,8 +104,21 @@ def get_restaurants_data(bbox):
         return response.json()
     else:
         return None
+    
+
+def display_poi_with_cluster(m, poi_data, icon_color):
+    cluster = MarkerCluster().add_to(m)
+    for element in poi_data['elements']:
+        if 'lat' in element and 'lon' in element and 'name' in element.get('tags', {}):
+            folium.Marker(
+                location=[element['lat'], element['lon']],
+                popup=element.get('tags', {}).get('name', 'N/A'),
+                icon=folium.Icon(color=icon_color)
+            ).add_to(cluster)
+
 
 # Fonction pour obtenir les coordonnées géographiques d'une ville à partir de son code INSEE
+@st.cache_data
 def get_coordinates_from_insee(code_insee):
     url = f"https://api-adresse.data.gouv.fr/search/?q={code_insee}&type=municipality&autocomplete=0"
     response = requests.get(url, verify=False)
@@ -133,6 +151,7 @@ def load_etablissement_data(path):
     return pd.read_csv(path)
 
 # Fonction pour récupérer la latitude et longitude
+@st.cache_data
 def get_coordinates(city_name):
     try:
         location = geolocator.geocode(city_name)
@@ -144,6 +163,28 @@ def get_coordinates(city_name):
         print(f"Erreur lors de la récupération des coordonnées pour {city_name}: {e}")
         return None, None
 
+
+@st.cache_data
+def create_comparison_graph(data_1, data_2, variables_a_comparer, ville_1, ville_2):
+    graphe_data = pd.DataFrame({
+        "Variable": list(variables_a_comparer.values()),
+        ville_1: [data_1[k] for k in variables_a_comparer.keys()],
+        ville_2: [data_2[k] for k in variables_a_comparer.keys()],
+    })
+
+    graphe_data = graphe_data.melt(id_vars="Variable", var_name="Ville", value_name="Valeur")
+
+    fig = px.bar(
+        graphe_data,
+        x="Variable",
+        y="Valeur",
+        color="Ville",
+        barmode="group",
+        title="📉 Comparatif des indicateurs clés"
+    )
+    return fig
+
+
 try:
     df = load_data(file_path)
     df_etablissement = load_etablissement_data(etablissement_path)
@@ -151,15 +192,9 @@ try:
     # Enlever les doublons basés sur 'code_commune_INSEE'
     df = df.drop_duplicates(subset='code_commune_INSEE')
 
-    # Créer un dictionnaire pour compter les occurrences des villes
-    city_counts = df["Libellé commune ou ARM"].value_counts()
-
-    # Renommer les villes si elles apparaissent plusieurs fois
-    for city, count in city_counts.items():
-        if count > 1:
-            city_rows = df[df["Libellé commune ou ARM"] == city]
-            for idx, row in city_rows.iterrows():
-                df.at[idx, "Libellé commune ou ARM"] = f"{row['Libellé commune ou ARM']} ({row['Département']})"
+    # Ajouter un suffixe unique pour les doublons
+    df['Libellé commune ou ARM'] = df['Libellé commune ou ARM'] + \
+        df.groupby('Libellé commune ou ARM').cumcount().apply(lambda x: f" ({x})" if x > 0 else "")
 
     # Sélection des villes
     villes = sorted(df["Libellé commune ou ARM"].unique())
@@ -336,7 +371,7 @@ try:
             "Population en 2021": "Population",
             "Logements en 2021": "Logements",
             "Chômeurs 15-64 ans en 2021": "Chômage",
-            "Taux de pauvreté en 2021": "Pauvreté (%)",
+            # "Taux de pauvreté en 2021": "Pauvreté (%)",
             "Emplois au LT en 2021": "Emplois",
             "Médiane du niveau vie en 2021": "Niveau de vie (€)",
             "Naissances entre 2015 et 2020": "Naissances",
@@ -346,22 +381,7 @@ try:
             "Total des ets actifs fin 2022": "Entreprises actives",
         }
 
-        graphe_data = pd.DataFrame({
-            "Variable": list(variables_a_comparer.values()),
-            ville_1: [data_1[k] for k in variables_a_comparer.keys()],
-            ville_2: [data_2[k] for k in variables_a_comparer.keys()],
-        })
-
-        graphe_data = graphe_data.melt(id_vars="Variable", var_name="Ville", value_name="Valeur")
-
-        fig = px.bar(
-            graphe_data,
-            x="Variable",
-            y="Valeur",
-            color="Ville",
-            barmode="group",
-            title="📉 Comparatif des indicateurs clés"
-        )
+        fig = create_comparison_graph(data_1, data_2, variables_a_comparer, ville_1, ville_2)
         st.plotly_chart(fig, use_container_width=True)
 
         # Compteur des variables supérieures
@@ -393,13 +413,7 @@ try:
             poi_data = get_restaurants_data(bbox)
 
         if poi_data:
-            for element in poi_data['elements']:
-                if 'lat' in element and 'lon' in element and 'name' in element.get('tags', {}):
-                    folium.Marker(
-                        location=[element['lat'], element['lon']],
-                        popup=element.get('tags', {}).get('name', 'N/A'),
-                        icon=folium.Icon(color=icon_color)
-                    ).add_to(m)
+            display_poi_with_cluster(m, poi_data, icon_color)
 
     # Onglet Ville 1
     with tab2:
@@ -412,7 +426,11 @@ try:
         get_weather(data_1['latitude'], data_1['longitude'], "6aea17a766b369d16fdcf84a0b16fdac")
 
         # Sélecteur pour choisir les points d'intérêt à afficher
-        poi_options = st.multiselect("Sélectionnez les points d'intérêt à afficher :", ["Gares", "Musées", "Restaurants"])
+        poi_options_ville_1 = st.multiselect(
+            "Sélectionnez les points d'intérêt à afficher :",
+            ["Gares", "Musées", "Restaurants"], 
+            key="poi_ville_1"
+        )
 
         # Afficher la carte pour localiser la ville 1
         if "latitude" in data_1 and "longitude" in data_1:
@@ -426,11 +444,11 @@ try:
 
             # Récupérer et afficher les données des points d'intérêt sélectionnés
             bbox = f"{data_1['latitude']-0.1},{data_1['longitude']-0.1},{data_1['latitude']+0.1},{data_1['longitude']+0.1}"
-            if "Gares" in poi_options:
+            if "Gares" in poi_options_ville_1:
                 display_poi_on_map(m, data_1, bbox, "Gares", "green")
-            if "Musées" in poi_options:
+            if "Musées" in poi_options_ville_1:
                 display_poi_on_map(m, data_1, bbox, "Musées", "purple")
-            if "Restaurants" in poi_options:
+            if "Restaurants" in poi_options_ville_1:
                 display_poi_on_map(m, data_1, bbox, "Restaurants", "orange")
 
             st_folium(m, width=700, height=400)
@@ -482,7 +500,7 @@ try:
             st.dataframe(ecoles_ville_1)
 
         # Afficher les données des points d'intérêt sélectionnés
-        if "Gares" in poi_options:
+        if "Gares" in poi_options_ville_1:
             st.write("### Gares")
             gares_data_1 = get_gares_data(bbox)
             if gares_data_1:
@@ -498,7 +516,7 @@ try:
             else:
                 st.warning("Aucune gare trouvée pour cette ville.")
 
-        if "Musées" in poi_options:
+        if "Musées" in poi_options_ville_1:
             st.write("### Musées")
             musees_data_1 = get_musees_data(bbox)
             if musees_data_1:
@@ -514,7 +532,7 @@ try:
             else:
                 st.warning("Aucun musée trouvé pour cette ville.")
 
-        if "Restaurants" in poi_options:
+        if "Restaurants" in poi_options_ville_1:
             st.write("### Restaurants")
             restaurants_data_1 = get_restaurants_data(bbox)
             if restaurants_data_1:
@@ -541,7 +559,11 @@ try:
         get_weather(data_2['latitude'], data_2['longitude'], "6aea17a766b369d16fdcf84a0b16fdac")
 
         # Sélecteur pour choisir les points d'intérêt à afficher
-        poi_options = st.multiselect("Sélectionnez les points d'intérêt à afficher :", ["Gares", "Musées", "Restaurants"])
+        poi_options_ville_2 = st.multiselect(
+            "Sélectionnez les points d'intérêt à afficher :",
+            ["Gares", "Musées", "Restaurants"],
+            key="poi_ville_2"
+        )
 
         # Afficher la carte pour localiser la ville 2
         if "latitude" in data_2 and "longitude" in data_2:
@@ -555,11 +577,11 @@ try:
 
             # Récupérer et afficher les données des points d'intérêt sélectionnés
             bbox = f"{data_2['latitude']-0.1},{data_2['longitude']-0.1},{data_2['latitude']+0.1},{data_2['longitude']+0.1}"
-            if "Gares" in poi_options:
+            if "Gares" in poi_options_ville_2:
                 display_poi_on_map(m, data_2, bbox, "Gares", "green")
-            if "Musées" in poi_options:
+            if "Musées" in poi_options_ville_2:
                 display_poi_on_map(m, data_2, bbox, "Musées", "purple")
-            if "Restaurants" in poi_options:
+            if "Restaurants" in poi_options_ville_2:
                 display_poi_on_map(m, data_2, bbox, "Restaurants", "orange")
 
             st_folium(m, width=700, height=400)
@@ -611,7 +633,7 @@ try:
             st.dataframe(ecoles_ville_2)
 
         # Afficher les données des points d'intérêt sélectionnés
-        if "Gares" in poi_options:
+        if "Gares" in poi_options_ville_2:
             st.write("### Gares")
             gares_data_2 = get_gares_data(bbox)
             if gares_data_2:
@@ -627,7 +649,7 @@ try:
             else:
                 st.warning("Aucune gare trouvée pour cette ville.")
 
-        if "Musées" in poi_options:
+        if "Musées" in poi_options_ville_2:
             st.write("### Musées")
             musees_data_2 = get_musees_data(bbox)
             if musees_data_2:
@@ -643,7 +665,7 @@ try:
             else:
                 st.warning("Aucun musée trouvé pour cette ville.")
 
-        if "Restaurants" in poi_options:
+        if "Restaurants" in poi_options_ville_2:
             st.write("### Restaurants")
             restaurants_data_2 = get_restaurants_data(bbox)
             if restaurants_data_2:
