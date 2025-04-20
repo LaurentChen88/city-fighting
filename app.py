@@ -15,7 +15,7 @@ st.set_page_config(
     layout="wide"
 )
 # Titre
-st.title("🏙️ City Fighting - Comparateur de deux villes")
+st.title("🏙️ City Fighting - Comparateur de deux villes en France")
 
 
 # Initialisation du géolocaliseur
@@ -124,13 +124,22 @@ def update_coordinates(data, city_name):
             data['longitude'] = longitude
 
 
-@st.cache_data
-def create_comparison_graph(data_1, data_2, variables_a_comparer, ville_1, ville_2):
+def create_comparison_graph(data_1, data_2, metrics, ville_1, ville_2):
+    """
+    Crée un graphique comparatif basé sur les métriques fournies.
+
+    :param data_1: Données de la première ville
+    :param data_2: Données de la deuxième ville
+    :param metrics: Dictionnaire des métriques (clé: label, valeur: (colonne, unité))
+    :param ville_1: Nom de la première ville
+    :param ville_2: Nom de la deuxième ville
+    :return: Graphique Plotly
+    """
     # Création du DataFrame initial
     graphe_data = pd.DataFrame({
-        "Variable": list(variables_a_comparer.values()),
-        f"{ville_1}_original": [pd.to_numeric(data_1[k], errors='coerce') for k in variables_a_comparer.keys()],
-        f"{ville_2}_original": [pd.to_numeric(data_2[k], errors='coerce') for k in variables_a_comparer.keys()],
+        "Variable": list(metrics.keys()),  # Utilise les labels des métriques
+        f"{ville_1}_original": [pd.to_numeric(data_1[column], errors='coerce') for column, _ in metrics.values()],
+        f"{ville_2}_original": [pd.to_numeric(data_2[column], errors='coerce') for column, _ in metrics.values()],
     })
 
     # Remplacer les valeurs NaN par 0 pour éviter les erreurs dans les calculs
@@ -178,31 +187,6 @@ def create_comparison_graph(data_1, data_2, variables_a_comparer, ville_1, ville
     return fig
 
 
-# affichage générique des indicateurs de la ville
-def display_city_metrics(data, city_name):
-    st.markdown(f"### {city_name}")
-    
-    metrics = {
-        "Population 2021": "Population en 2021",
-        "Logements en 2021": "Logements en 2021",
-        "Chômeurs 15-64 ans": "Chômeurs 15-64 ans en 2021",
-        "Naissances 2015-2020": "Naissances entre 2015 et 2020",
-        "Décès 2015-2020": "Décès entre 2015 et 2020",
-        "Résidences principales": "Résidences principales en 2021",
-        "Logements vacants": "Logements vacants en 2021",
-        "Emplois": "Emplois au LT en 2021",
-        "Entreprises actives": "Total des ets actifs fin 2022",
-        "Niveau de vie médian": "Médiane du niveau vie en 2021"
-    }
-    
-    for label, column in metrics.items():
-        value = pd.to_numeric(data[column], errors='coerce')
-        if not pd.isna(value):
-            st.metric(label, f"{int(value):,}".replace(",", " "))
-        else:
-            st.warning(f"Donnée manquante pour {label.lower()} de cette ville.")
-
-
 # Fonction pour afficher les points d'intérêt sur la carte
 def display_poi_on_map(m, bbox, poi_key, poi_type, icon_color):
     poi_data = get_overpass_data(bbox, poi_key, poi_type)
@@ -210,11 +194,9 @@ def display_poi_on_map(m, bbox, poi_key, poi_type, icon_color):
         display_poi_with_cluster(m, poi_data, icon_color)
 
 
-# fonction générique pour afficher les informations détaillées d'une ville
-def display_city_details(city_name, data, df_etablissement, poi_key):
-    st.header(f"📍 Informations détaillées : {city_name}")
-    wiki_url = f"https://fr.wikipedia.org/wiki/{city_name.replace(' ', '_')}"
-    st.markdown(f"🔗 [Page Wikipédia de {city_name}]({wiki_url})")
+# fonction générique pour afficher les points d'intérêt
+def display_poi(city_name, data, poi_key):
+    st.markdown(f"### {city_name}")
 
     # Sélecteur pour les points d'intérêt
     poi_options = st.multiselect(
@@ -246,63 +228,24 @@ def display_city_details(city_name, data, df_etablissement, poi_key):
     else:
         st.warning("Données géographiques manquantes pour cette ville.")
 
-    # Afficher les sections
-    st.write("### Démographie")
-    st.write(f"- Population 2021 : {int(pd.to_numeric(data['Population en 2021'], errors='coerce')):,}".replace(",", " "))
-    st.write(f"- Naissances 2015-2020 : {int(pd.to_numeric(data['Naissances entre 2015 et 2020'], errors='coerce')):,}".replace(",", " "))
-    st.write(f"- Décès 2015-2020 : {int(pd.to_numeric(data['Décès entre 2015 et 2020'], errors='coerce')):,}".replace(",", " "))
 
-    st.write("### Logement")
-    st.write(f"- Logements : {int(pd.to_numeric(data['Logements en 2021'], errors='coerce')):,}".replace(",", " "))
-    st.write(f"- Résidences principales : {int(pd.to_numeric(data['Résidences principales en 2021'], errors='coerce')):,}".replace(",", " "))
-    st.write(f"- Vacants : {int(pd.to_numeric(data['Logements vacants en 2021'], errors='coerce')):,}".replace(",", " "))
+# fonction générique qui prend en paramètre les métriques à afficher et les données associées
+def display_metrics(data, city_name, metrics, wiki_url=False):
+    """
+    Affiche des métriques génériques pour une ville.
 
-    st.write("### Emploi et économie")
-    st.write(f"- Emplois : {int(pd.to_numeric(data['Emplois au LT en 2021'], errors='coerce')):,}".replace(",", " "))
-    st.write(f"- Chômeurs : {int(pd.to_numeric(data['Chômeurs 15-64 ans en 2021'], errors='coerce')):,}".replace(",", " "))
-    st.write(f"- Entreprises actives : {int(pd.to_numeric(data['Total des ets actifs fin 2022'], errors='coerce')):,}".replace(",", " "))
-
-    st.write("### Revenus")
-    st.write(f"- Niveau de vie médian : {int(pd.to_numeric(data['Médiane du niveau vie en 2021'], errors='coerce')):,} €".replace(",", " "))
-
-    # Afficher les écoles
-    st.write("### Établissements scolaires")
-    ecoles = df_etablissement[df_etablissement['Numéro Région'] == data['Région']]
-
-    col_map, col_table = st.columns(2)
-    with col_map:
-        if not ecoles.empty:
-            m_ecoles = folium.Map(location=[ecoles.iloc[0]['latitude_ecole'], ecoles.iloc[0]['longitude_ecole']], zoom_start=12)
-            for _, ecole in ecoles.iterrows():
-                folium.Marker(
-                    location=[ecole['latitude_ecole'], ecole['longitude_ecole']],
-                    popup=ecole['libellé'],
-                    icon=folium.Icon(color="green")
-                ).add_to(m_ecoles)
-            st_folium(m_ecoles, width=700, height=500)
-        else:
-            st.warning("Aucune école trouvée pour cette ville.")
-
-    with col_table:
-        st.dataframe(ecoles)
-
-# fonction pour récupérer les données générales 
-def get_general_data(data, city_name):
+    :param data: Données de la ville
+    :param city_name: Nom de la ville
+    :param metrics: Dictionnaire des métriques à afficher (clé: label, valeur: (colonne, unité))
+    :param wiki_url: URL de la page Wikipédia (facultatif)
+    """
     st.markdown(f"### {city_name}")
     
-    wiki_url = f"https://fr.wikipedia.org/wiki/{city_name.replace(' ', '_')}"
-    st.markdown(f"🔗 [Page Wikipédia de {city_name}]({wiki_url})")
-
-    metrics = {
-        "Population 2021": ("Population en 2021", ""), 
-        "Superficie": ("Superficie", "km²"),
-        "Région": ("Région", ""),
-        "Département": ("Département", ""),
-        "Niveau de vie médian": ("Médiane du niveau vie en 2021", "€"),
-        "Naissances domiciliées en 2023": ("Nombre de naissances domiciliées en 2023", ""), 
-        "Décès domiciliés en 2023": ("Nombre de décès domiciliés en 2023", "")
-    }
-
+    # Afficher le lien Wikipédia si fourni
+    if wiki_url:
+        wiki_url = f"https://fr.wikipedia.org/wiki/{city_name.replace(' ', '_')}"
+        st.markdown(f"🔗 [Page Wikipédia de {city_name}]({wiki_url})")
+    
     for label, (column, unit) in metrics.items():
         value = pd.to_numeric(data[column], errors='coerce')
         if not pd.isna(value):
@@ -311,12 +254,35 @@ def get_general_data(data, city_name):
         else:
             st.warning(f"Donnée manquante pour {label.lower()} de cette ville.")
 
+# fonction générique pour afficher les formations
+def display_formation(city_name, data, df_etablissement):
+    st.markdown(f"### {city_name}")
+    ecoles = df_etablissement[df_etablissement['Numéro Région'] == data['Région']]
+
+    # Afficher la carte
+    if not ecoles.empty:
+        m_ecoles = folium.Map(location=[ecoles.iloc[0]['latitude_ecole'], ecoles.iloc[0]['longitude_ecole']], zoom_start=12)
+        for _, ecole in ecoles.iterrows():
+            folium.Marker(
+                location=[ecole['latitude_ecole'], ecole['longitude_ecole']],
+                popup=ecole['libellé'],
+                icon=folium.Icon(color="green")
+            ).add_to(m_ecoles)
+        st_folium(m_ecoles, width=700, height=500)
+    else:
+        st.warning("Aucune école trouvée pour cette ville.")
+
+    # Afficher le tableau
+    st.dataframe(ecoles)
 
 
 # début de l'application
 try:
     df = load_data(file_path)
     df_etablissement = load_etablissement_data(etablissement_path)
+
+    # filtrez les villes avec une population supérieure à 20 000
+    df = df[pd.to_numeric(df['Population en 2021'], errors='coerce') > 20000]
 
     # Enlever les doublons basés sur 'code_commune_INSEE'
     df = df.drop_duplicates(subset='code_commune_INSEE')
@@ -341,74 +307,78 @@ try:
     update_coordinates(data_2, ville_2)
 
     # Onglets
-    tab1, tab2, tab3, onglet_general, onglet_meteo = st.tabs(["🔍 Comparatif global", f"🏘️ {ville_1}", f"🏘️ {ville_2}", "📚 Données générales", "🌤️ Météo"])
-
-    with tab1:
-        st.subheader("🔍 Comparaison graphique")
-
-        col_left, col_right = st.columns(2)
-
-        with col_left:
-            display_city_metrics(data_1, ville_1)
-
-        with col_right:
-            display_city_metrics(data_2, ville_2)
-
-        st.markdown("---")
-        st.subheader("📊 Graphe comparatif")
-
-        variables_a_comparer = {
-            "Population en 2021": "Population",
-            "Logements en 2021": "Logements",
-            "Chômeurs 15-64 ans en 2021": "Chômage",
-            "Emplois au LT en 2021": "Emplois",
-            "Médiane du niveau vie en 2021": "Niveau de vie (€)",
-            "Naissances entre 2015 et 2020": "Naissances",
-            "Décès entre 2015 et 2020": "Décès",
-            "Résidences principales en 2021": "Résidences principales",
-            "Logements vacants en 2021": "Logements vacants",
-            "Total des ets actifs fin 2022": "Entreprises actives",
-        }
-
-        fig = create_comparison_graph(data_1, data_2, variables_a_comparer, ville_1, ville_2)
-        st.plotly_chart(fig, use_container_width=True)
-
-        # Compteur des variables supérieures
-        positive_variables = [
-            "Population en 2021",
-            "Logements en 2021",
-            "Emplois au LT en 2021",
-            "Naissances entre 2015 et 2020",
-            "Résidences principales en 2021",
-            "Total des ets actifs fin 2022",
-            "Médiane du niveau vie en 2021"
-        ]
-
-        count_ville_1 = sum([1 for k in positive_variables if pd.to_numeric(data_1[k], errors='coerce') > pd.to_numeric(data_2[k], errors='coerce')])
-        count_ville_2 = sum([1 for k in positive_variables if pd.to_numeric(data_2[k], errors='coerce') > pd.to_numeric(data_1[k], errors='coerce')])
-
-        st.markdown(f"**Nombre de variables supérieures :**")
-        st.markdown(f"- {ville_1} : {count_ville_1}")
-        st.markdown(f"- {ville_2} : {count_ville_2}")
-
-    # ville 1
-    with tab2:
-        display_city_details(ville_1, data_1, df_etablissement, "poi_ville_1")
-
-    # ville 2
-    with tab3:
-        display_city_details(ville_2, data_2, df_etablissement, "poi_ville_2")
+    onglet_general, onglet_emploi, onglet_logement, onglet_meteo, onglet_poi, onglet_formation = st.tabs([
+        f"🔍 Données générales", 
+         "💼 Emploi", 
+         "🏠 Logement", 
+         "🌤️ Météo", 
+         "📍 Points d'intérêt",
+         "🎓 Formation"
+         ])
 
     # onglet général
     with onglet_general:
-        st.subheader("📚 Données générales")
+        st.subheader("🔍 Données générales")
+
+        general_metrics = {
+            "Population 2021": ("Population en 2021", ""), 
+            "Superficie": ("Superficie", "km²"),
+            "Région": ("Région", ""),
+            "Département": ("Département", ""),
+            "Niveau de vie médian": ("Médiane du niveau vie en 2021", "€"),
+            "Naissances domiciliées en 2023": ("Nombre de naissances domiciliées en 2023", ""), 
+            "Décès domiciliés en 2023": ("Nombre de décès domiciliés en 2023", "")
+        }
         col_left, col_right = st.columns(2)
 
         with col_left:
-            get_general_data(data_1, ville_1)
+            display_metrics(data_1, ville_1, general_metrics, True)
 
         with col_right:
-            get_general_data(data_2, ville_2)
+            display_metrics(data_2, ville_2, general_metrics, True)
+
+        fig = create_comparison_graph(data_1, data_2, general_metrics, ville_1, ville_2)
+        st.plotly_chart(fig, use_container_width=True)
+
+    # onglet emploi
+    with onglet_emploi:
+        st.subheader("💼 Emploi")
+
+        emploi_metrics = {
+            "Emplois en 2021": ("Emplois au LT en 2021", ""),
+            "Entreprises actives fin 2022": ("Total des ets actifs fin 2022", ""),
+            "Chômeurs 15-64 ans": ("Chômeurs 15-64 ans en 2021", "")
+        }
+        col_left, col_right = st.columns(2)
+
+        with col_left:
+            display_metrics(data_1, ville_1, emploi_metrics)
+
+        with col_right:
+            display_metrics(data_2, ville_2, emploi_metrics)
+
+        fig = create_comparison_graph(data_1, data_2, emploi_metrics, ville_1, ville_2)
+        st.plotly_chart(fig, use_container_width=True)
+
+    # onglet logement
+    with onglet_logement:
+        st.subheader("🏠 Logement")
+
+        logement_metrics = {
+            "Logements en 2021": ("Logements en 2021", ""),
+            "Résidences principales en 2021": ("Résidences principales en 2021", ""),
+            "Logements vacants en 2021": ("Logements vacants en 2021", "")
+        }
+        col_left, col_right = st.columns(2)
+
+        with col_left:
+            display_metrics(data_1, ville_1, logement_metrics)
+
+        with col_right:
+            display_metrics(data_2, ville_2, logement_metrics)
+
+        fig = create_comparison_graph(data_1, data_2, logement_metrics, ville_1, ville_2)
+        st.plotly_chart(fig, use_container_width=True)
 
     # onglet météo
     with onglet_meteo:
@@ -427,6 +397,27 @@ try:
                 get_weather(data_2['latitude'], data_2['longitude'])
             else:
                 st.warning("Données géographiques manquantes pour cette ville.")
+
+    # onglet points d'intérêt
+    with onglet_poi:
+        st.subheader("📍 Points d'intérêt")
+        col_left, col_right = st.columns(2)
+
+        with col_left:
+            display_poi(ville_1, data_1, "poi_ville_1")
+
+        with col_right:
+            display_poi(ville_2, data_2, "poi_ville_2")
+
+    with onglet_formation:
+        st.subheader("🎓 Formation")
+        col_left, col_right = st.columns(2)
+
+        with col_left:
+            display_formation(ville_1, data_1, df_etablissement)
+
+        with col_right:
+            display_formation(ville_2, data_2, df_etablissement)
 
 
 except FileNotFoundError:
