@@ -7,8 +7,33 @@ import requests
 from geopy.geocoders import Nominatim
 from folium.plugins import MarkerCluster
 
+
+# Configuration de la page
+st.set_page_config(
+    page_title="City Fighting",
+    page_icon="🏙️",
+    layout="wide"
+)
+# Titre
+st.title("🏙️ City Fighting - Comparateur de deux villes")
+
+
 # Initialisation du géolocaliseur
 geolocator = Nominatim(user_agent="mon_application")
+
+# Chargement des données
+file_path = "data/data_final.xlsx"
+etablissement_path = "data/etablissement_final.csv"
+
+
+@st.cache_data
+def load_data(path):
+    return pd.read_excel(path)
+
+@st.cache_data
+def load_etablissement_data(path):
+    return pd.read_csv(path)
+
 
 # Fonction pour obtenir la météo
 @st.cache_data # Cachez les résultats des appels API avec @st.cache_data pour éviter de refaire les mêmes requêtes à chaque exécution
@@ -42,16 +67,17 @@ def get_weather(lat, lon, api_key):
     except Exception as e:
         st.write("❌ Erreur inattendue :", e)
 
-# Fonction pour récupérer les données des gares à l'aide de l'API Overpass
+
+# Fonction générique pour récupérer les données des points d'intérêt (gares, musées, restaurants, etc.) à l'aide de l'API Overpass
 @st.cache_data
-def get_gares_data(bbox):
+def get_overpass_data(bbox, key, value):
     overpass_url = "http://overpass-api.de/api/interpreter"
     overpass_query = f"""
     [out:json];
     (
-      node["railway"="station"]({bbox});
-      way["railway"="station"]({bbox});
-      relation["railway"="station"]({bbox});
+      node["{key}"="{value}"]({bbox});
+      way["{key}"="{value}"]({bbox});
+      relation["{key}"="{value}"]({bbox});
     );
     out body;
     >;
@@ -63,48 +89,6 @@ def get_gares_data(bbox):
     else:
         return None
 
-# Fonction pour récupérer les données des musées à l'aide de l'API Overpass
-@st.cache_data
-def get_musees_data(bbox):
-    overpass_url = "http://overpass-api.de/api/interpreter"
-    overpass_query = f"""
-    [out:json];
-    (
-      node["tourism"="museum"]({bbox});
-      way["tourism"="museum"]({bbox});
-      relation["tourism"="museum"]({bbox});
-    );
-    out body;
-    >;
-    out skel qt;
-    """
-    response = requests.get(overpass_url, params={'data': overpass_query}, verify=False)
-    if response.status_code == 200:
-        return response.json()
-    else:
-        return None
-
-# Fonction pour récupérer les données des restaurants à l'aide de l'API Overpass
-@st.cache_data
-def get_restaurants_data(bbox):
-    overpass_url = "http://overpass-api.de/api/interpreter"
-    overpass_query = f"""
-    [out:json];
-    (
-      node["amenity"="restaurant"]({bbox});
-      way["amenity"="restaurant"]({bbox});
-      relation["amenity"="restaurant"]({bbox});
-    );
-    out body;
-    >;
-    out skel qt;
-    """
-    response = requests.get(overpass_url, params={'data': overpass_query}, verify=False)
-    if response.status_code == 200:
-        return response.json()
-    else:
-        return None
-    
 
 def display_poi_with_cluster(m, poi_data, icon_color):
     cluster = MarkerCluster().add_to(m)
@@ -129,26 +113,6 @@ def get_coordinates_from_insee(code_insee):
             return coords[1], coords[0]  # Latitude, Longitude
     return None, None
 
-# Configuration de la page
-st.set_page_config(
-    page_title="Comparateur de villes - City Fighting",
-    page_icon="🏙️",
-    layout="wide"
-)
-
-st.title("🏙️ Comparateur de deux villes")
-
-# Chargement des données
-file_path = "data/data_final.xlsx"
-etablissement_path = "data/etablissement_final.csv"
-
-@st.cache_data
-def load_data(path):
-    return pd.read_excel(path)
-
-@st.cache_data
-def load_etablissement_data(path):
-    return pd.read_csv(path)
 
 # Fonction pour récupérer la latitude et longitude
 @st.cache_data
@@ -162,6 +126,15 @@ def get_coordinates(city_name):
     except Exception as e:
         print(f"Erreur lors de la récupération des coordonnées pour {city_name}: {e}")
         return None, None
+
+
+# Vérifier si les coordonnées manquent et les récupérer si nécessaire
+def update_coordinates(data, city_name):
+    if pd.isna(data['longitude']) or pd.isna(data['latitude']):
+        latitude, longitude = get_coordinates(city_name)
+        if latitude is not None and longitude is not None:
+            data['latitude'] = latitude
+            data['longitude'] = longitude
 
 
 @st.cache_data
@@ -217,6 +190,121 @@ def create_comparison_graph(data_1, data_2, variables_a_comparer, ville_1, ville
     )
     return fig
 
+
+# affichage générique des indicateurs de la ville
+def display_city_metrics(data, city_name):
+    st.markdown(f"### {city_name}")
+    
+    metrics = {
+        "Population 2021": "Population en 2021",
+        "Logements en 2021": "Logements en 2021",
+        "Chômeurs 15-64 ans": "Chômeurs 15-64 ans en 2021",
+        "Naissances 2015-2020": "Naissances entre 2015 et 2020",
+        "Décès 2015-2020": "Décès entre 2015 et 2020",
+        "Résidences principales": "Résidences principales en 2021",
+        "Logements vacants": "Logements vacants en 2021",
+        "Emplois": "Emplois au LT en 2021",
+        "Entreprises actives": "Total des ets actifs fin 2022",
+        "Niveau de vie médian": "Médiane du niveau vie en 2021"
+    }
+    
+    for label, column in metrics.items():
+        value = pd.to_numeric(data[column], errors='coerce')
+        if not pd.isna(value):
+            st.metric(label, f"{int(value):,}".replace(",", " "))
+        else:
+            st.warning(f"Donnée manquante pour {label.lower()} de cette ville.")
+
+
+# Fonction pour afficher les points d'intérêt sur la carte
+def display_poi_on_map(m, bbox, poi_key, poi_type, icon_color):
+    poi_data = get_overpass_data(bbox, poi_key, poi_type)
+    if poi_data:
+        display_poi_with_cluster(m, poi_data, icon_color)
+
+
+# fonction générique pour afficher les informations détaillées d'une ville
+def display_city_details(city_name, data, df_etablissement, poi_key):
+    st.header(f"📍 Informations détaillées : {city_name}")
+    wiki_url = f"https://fr.wikipedia.org/wiki/{city_name.replace(' ', '_')}"
+    st.markdown(f"🔗 [Page Wikipédia de {city_name}]({wiki_url})")
+
+    # Afficher la météo
+    st.subheader("Météo actuelle")
+    get_weather(data['latitude'], data['longitude'], "6aea17a766b369d16fdcf84a0b16fdac")
+
+    # Sélecteur pour les points d'intérêt
+    poi_options = st.multiselect(
+        "Sélectionnez les points d'intérêt à afficher :",
+        ["Gares", "Musées", "Restaurants"],
+        key=poi_key
+    )
+
+    # Afficher la carte
+    if "latitude" in data and "longitude" in data:
+        m = folium.Map(location=[data["latitude"], data["longitude"]], zoom_start=12)
+        folium.Marker(
+            location=[data["latitude"], data["longitude"]],
+            popup=city_name,
+            tooltip=city_name,
+            icon=folium.Icon(color="blue")
+        ).add_to(m)
+
+        # Récupérer et afficher les points d'intérêt
+        bbox = f"{data['latitude']-0.1},{data['longitude']-0.1},{data['latitude']+0.1},{data['longitude']+0.1}"
+        if "Gares" in poi_options:
+            display_poi_on_map(m, bbox, "railway", "station", "green")
+        if "Musées" in poi_options:
+            display_poi_on_map(m, bbox, "tourism", "museum", "purple")
+        if "Restaurants" in poi_options:
+            display_poi_on_map(m, bbox, "amenity", "restaurant", "orange")
+
+        st_folium(m, width=700, height=400)
+    else:
+        st.warning("Données géographiques manquantes pour cette ville.")
+
+    # Afficher les sections
+    st.write("### Démographie")
+    st.write(f"- Population 2021 : {int(pd.to_numeric(data['Population en 2021'], errors='coerce')):,}".replace(",", " "))
+    st.write(f"- Naissances 2015-2020 : {int(pd.to_numeric(data['Naissances entre 2015 et 2020'], errors='coerce')):,}".replace(",", " "))
+    st.write(f"- Décès 2015-2020 : {int(pd.to_numeric(data['Décès entre 2015 et 2020'], errors='coerce')):,}".replace(",", " "))
+
+    st.write("### Logement")
+    st.write(f"- Logements : {int(pd.to_numeric(data['Logements en 2021'], errors='coerce')):,}".replace(",", " "))
+    st.write(f"- Résidences principales : {int(pd.to_numeric(data['Résidences principales en 2021'], errors='coerce')):,}".replace(",", " "))
+    st.write(f"- Vacants : {int(pd.to_numeric(data['Logements vacants en 2021'], errors='coerce')):,}".replace(",", " "))
+
+    st.write("### Emploi et économie")
+    st.write(f"- Emplois : {int(pd.to_numeric(data['Emplois au LT en 2021'], errors='coerce')):,}".replace(",", " "))
+    st.write(f"- Chômeurs : {int(pd.to_numeric(data['Chômeurs 15-64 ans en 2021'], errors='coerce')):,}".replace(",", " "))
+    st.write(f"- Entreprises actives : {int(pd.to_numeric(data['Total des ets actifs fin 2022'], errors='coerce')):,}".replace(",", " "))
+
+    st.write("### Revenus")
+    st.write(f"- Niveau de vie médian : {int(pd.to_numeric(data['Médiane du niveau vie en 2021'], errors='coerce')):,} €".replace(",", " "))
+
+    # Afficher les écoles
+    st.write("### Établissements scolaires")
+    ecoles = df_etablissement[df_etablissement['Numéro Région'] == data['Région']]
+
+    col_map, col_table = st.columns(2)
+    with col_map:
+        if not ecoles.empty:
+            m_ecoles = folium.Map(location=[ecoles.iloc[0]['latitude_ecole'], ecoles.iloc[0]['longitude_ecole']], zoom_start=12)
+            for _, ecole in ecoles.iterrows():
+                folium.Marker(
+                    location=[ecole['latitude_ecole'], ecole['longitude_ecole']],
+                    popup=ecole['libellé'],
+                    icon=folium.Icon(color="green")
+                ).add_to(m_ecoles)
+            st_folium(m_ecoles, width=700, height=500)
+        else:
+            st.warning("Aucune école trouvée pour cette ville.")
+
+    with col_table:
+        st.dataframe(ecoles)
+
+
+# début de l'application
 try:
     df = load_data(file_path)
     df_etablissement = load_etablissement_data(etablissement_path)
@@ -224,33 +312,24 @@ try:
     # Enlever les doublons basés sur 'code_commune_INSEE'
     df = df.drop_duplicates(subset='code_commune_INSEE')
 
-    # Ajouter un suffixe unique pour les doublons
-    df['Libellé commune ou ARM'] = df['Libellé commune ou ARM'] + \
-        df.groupby('Libellé commune ou ARM').cumcount().apply(lambda x: f" ({x})" if x > 0 else "")
+    # Ajouter le code département uniquement en cas d'ambiguïté
+    ambiguous_cities = df['Libellé commune ou ARM'].duplicated(keep=False)  # Identifier les libellés ambigus
+    df.loc[ambiguous_cities, 'Libellé commune ou ARM'] = df.loc[ambiguous_cities].apply(
+        lambda row: f"{row['Libellé commune ou ARM']} ({row['Département']})", axis=1
+    )
 
     # Sélection des villes
     villes = sorted(df["Libellé commune ou ARM"].unique())
     col1, col2 = st.columns(2)
     with col1:
-        ville_1 = st.selectbox("📍 Sélectionnez la première ville :", villes)
+        ville_1 = st.selectbox("1️⃣ Sélectionnez la première ville :", villes)
     with col2:
-        ville_2 = st.selectbox("🏙️ Sélectionnez la deuxième ville :", villes, index=1)
+        ville_2 = st.selectbox("2️⃣ Sélectionnez la deuxième ville :", villes, index=1)
     data_1 = df[df["Libellé commune ou ARM"] == ville_1].squeeze()
     data_2 = df[df["Libellé commune ou ARM"] == ville_2].squeeze()
 
-    # Vérifier si les coordonnées manquent et les récupérer si nécessaire pour data_1
-    if pd.isna(data_1['longitude']) or pd.isna(data_1['latitude']):
-        latitude, longitude = get_coordinates(ville_1)
-        if latitude is not None and longitude is not None:
-            data_1['latitude'] = latitude
-            data_1['longitude'] = longitude
-
-    # Vérifier si les coordonnées manquent et les récupérer si nécessaire pour data_2
-    if pd.isna(data_2['longitude']) or pd.isna(data_2['latitude']):
-        latitude, longitude = get_coordinates(ville_2)
-        if latitude is not None and longitude is not None:
-            data_2['latitude'] = latitude
-            data_2['longitude'] = longitude
+    update_coordinates(data_1, ville_1)
+    update_coordinates(data_2, ville_2)
 
     # Onglets
     tab1, tab2, tab3 = st.tabs(["🔍 Comparatif global", f"🏘️ {ville_1}", f"🏘️ {ville_2}"])
@@ -261,140 +340,10 @@ try:
         col_left, col_right = st.columns(2)
 
         with col_left:
-            st.markdown(f"### {ville_1}")
-            population_1 = pd.to_numeric(data_1["Population en 2021"], errors='coerce')
-            if not pd.isna(population_1):
-                st.metric("Population 2021", f"{int(population_1):,}".replace(",", " "))
-            else:
-                st.warning("Donnée manquante pour la population 2021 de cette ville.")
-
-            logements_1 = pd.to_numeric(data_1["Logements en 2021"], errors='coerce')
-            if not pd.isna(logements_1):
-                st.metric("Logements en 2021", f"{int(logements_1):,}".replace(",", " "))
-            else:
-                st.warning("Donnée manquante pour les logements 2021 de cette ville.")
-
-            # taux_pauvrete_1 = pd.to_numeric(data_1["Taux de pauvreté en 2021"], errors='coerce')
-            # if not pd.isna(taux_pauvrete_1):
-            #     st.metric("Taux de pauvreté", f"{taux_pauvrete_1} %")
-            # else:
-            #     st.warning("Donnée manquante pour le taux de pauvreté de cette ville.")
-
-            chomeurs_1 = pd.to_numeric(data_1["Chômeurs 15-64 ans en 2021"], errors='coerce')
-            if not pd.isna(chomeurs_1):
-                st.metric("Chômeurs 15-64 ans", f"{int(chomeurs_1):,}".replace(",", " "))
-            else:
-                st.warning("Donnée manquante pour les chômeurs 15-64 ans de cette ville.")
-
-            naissances_1 = pd.to_numeric(data_1["Naissances entre 2015 et 2020"], errors='coerce')
-            if not pd.isna(naissances_1):
-                st.metric("Naissances 2015-2020", f"{int(naissances_1):,}".replace(",", " "))
-            else:
-                st.warning("Donnée manquante pour les naissances 2015-2020.")
-
-            deces_1 = pd.to_numeric(data_1["Décès entre 2015 et 2020"], errors='coerce')
-            if not pd.isna(deces_1):
-                st.metric("Décès 2015-2020", f"{int(deces_1):,}".replace(",", " "))
-            else:
-                st.warning("Donnée manquante pour les décès 2015-2020.")
-
-            residences_principales_1 = pd.to_numeric(data_1["Résidences principales en 2021"], errors='coerce')
-            if not pd.isna(residences_principales_1):
-                st.metric("Résidences principales", f"{int(residences_principales_1):,}".replace(",", " "))
-            else:
-                st.warning("Donnée manquante pour les résidences principales de cette ville.")
-
-            logements_vacants_1 = pd.to_numeric(data_1["Logements vacants en 2021"], errors='coerce')
-            if not pd.isna(logements_vacants_1):
-                st.metric("Logements vacants", f"{int(logements_vacants_1):,}".replace(",", " "))
-            else:
-                st.warning("Donnée manquante pour les logements vacants de cette ville.")
-
-            emplois_1 = pd.to_numeric(data_1["Emplois au LT en 2021"], errors='coerce')
-            if not pd.isna(emplois_1):
-                st.metric("Emplois", f"{int(emplois_1):,}".replace(",", " "))
-            else:
-                st.warning("Donnée manquante pour les emplois de cette ville.")
-
-            entreprises_actives_1 = pd.to_numeric(data_1["Total des ets actifs fin 2022"], errors='coerce')
-            if not pd.isna(entreprises_actives_1):
-                st.metric("Entreprises actives", f"{int(entreprises_actives_1):,}".replace(",", " "))
-            else:
-                st.warning("Donnée manquante pour les entreprises actives de cette ville.")
-
-            niveau_vie_1 = pd.to_numeric(data_1["Médiane du niveau vie en 2021"], errors='coerce')
-            if not pd.isna(niveau_vie_1):
-                st.metric("Niveau de vie médian", f"{int(entreprises_actives_1):,}".replace(",", " "))
-            else:
-                st.warning("Donnée manquante pour le niveau de vie médian de cette ville.")
+            display_city_metrics(data_1, ville_1)
 
         with col_right:
-            st.markdown(f"### {ville_2}")
-            population_2 = pd.to_numeric(data_2["Population en 2021"], errors='coerce')
-            if not pd.isna(population_2):
-                st.metric("Population 2021", f"{int(population_2):,}".replace(",", " "))
-            else:
-                st.warning("Donnée manquante pour la population 2021 de cette ville.")
-
-            logements_2 = pd.to_numeric(data_2["Logements en 2021"], errors='coerce')
-            if not pd.isna(logements_2):
-                st.metric("Logements en 2021", f"{int(logements_2):,}".replace(",", " "))
-            else:
-                st.warning("Donnée manquante pour les logements 2021 de cette ville.")
-
-            # taux_pauvrete_2 = pd.to_numeric(data_2["Taux de pauvreté en 2021"], errors='coerce')
-            # if not pd.isna(taux_pauvrete_2):
-            #     st.metric("Taux de pauvreté", f"{taux_pauvrete_2} %")
-            # else:
-            #     st.warning("Donnée manquante pour le taux de pauvreté de cette ville.")
-
-            chomeurs_2 = pd.to_numeric(data_2["Chômeurs 15-64 ans en 2021"], errors='coerce')
-            if not pd.isna(chomeurs_2):
-                st.metric("Chômeurs 15-64 ans", f"{int(chomeurs_2):,}".replace(",", " "))
-            else:
-                st.warning("Donnée manquante pour les chômeurs 15-64 ans de cette ville.")
-
-            naissances_2 = pd.to_numeric(data_2["Naissances entre 2015 et 2020"], errors='coerce')
-            if not pd.isna(naissances_2):
-                st.metric("Naissances 2015-2020", f"{int(naissances_2):,}".replace(",", " "))
-            else:
-                st.warning("Donnée manquante pour les naissances 2015-2020.")
-
-            deces_2 = pd.to_numeric(data_2["Décès entre 2015 et 2020"], errors='coerce')
-            if not pd.isna(deces_2):
-                st.metric("Décès 2015-2020", f"{int(deces_2):,}".replace(",", " "))
-            else:
-                st.warning("Donnée manquante pour les décès 2015-2020.")
-
-            residences_principales_2 = pd.to_numeric(data_2["Résidences principales en 2021"], errors='coerce')
-            if not pd.isna(residences_principales_2):
-                st.metric("Résidences principales", f"{int(residences_principales_2):,}".replace(",", " "))
-            else:
-                st.warning("Donnée manquante pour les résidences principales de cette ville.")
-
-            logements_vacants_2 = pd.to_numeric(data_2["Logements vacants en 2021"], errors='coerce')
-            if not pd.isna(logements_vacants_2):
-                st.metric("Logements vacants", f"{int(logements_vacants_2):,}".replace(",", " "))
-            else:
-                st.warning("Donnée manquante pour les logements vacants de cette ville.")
-
-            emplois_2 = pd.to_numeric(data_2["Emplois au LT en 2021"], errors='coerce')
-            if not pd.isna(emplois_2):
-                st.metric("Emplois", f"{int(emplois_2):,}".replace(",", " "))
-            else:
-                st.warning("Donnée manquante pour les emplois de cette ville.")
-
-            entreprises_actives_2 = pd.to_numeric(data_2["Total des ets actifs fin 2022"], errors='coerce')
-            if not pd.isna(entreprises_actives_2):
-                st.metric("Entreprises actives", f"{int(entreprises_actives_2):,}".replace(",", " "))
-            else:
-                st.warning("Donnée manquante pour les entreprises actives de cette ville.")
-
-            niveau_vie_2 = pd.to_numeric(data_2["Médiane du niveau vie en 2021"], errors='coerce')
-            if not pd.isna(niveau_vie_2):
-                st.metric("Niveau de vie médian", f"{int(niveau_vie_2):,}".replace(",", " "))
-            else:
-                st.warning("Donnée manquante pour le niveau de vie médian de cette ville.")
+            display_city_metrics(data_2, ville_2)
 
         st.markdown("---")
         st.subheader("📊 Graphe comparatif")
@@ -403,7 +352,6 @@ try:
             "Population en 2021": "Population",
             "Logements en 2021": "Logements",
             "Chômeurs 15-64 ans en 2021": "Chômage",
-            #"Taux de pauvreté en 2021": "Pauvreté (%)",
             "Emplois au LT en 2021": "Emplois",
             "Médiane du niveau vie en 2021": "Niveau de vie (€)",
             "Naissances entre 2015 et 2020": "Naissances",
@@ -434,284 +382,12 @@ try:
         st.markdown(f"- {ville_1} : {count_ville_1}")
         st.markdown(f"- {ville_2} : {count_ville_2}")
 
-    # Fonction pour afficher les points d'intérêt sur la carte
-    def display_poi_on_map(m, data, bbox, poi_type, icon_color):
-        poi_data = None
-        if poi_type == "Gares":
-            poi_data = get_gares_data(bbox)
-        elif poi_type == "Musées":
-            poi_data = get_musees_data(bbox)
-        elif poi_type == "Restaurants":
-            poi_data = get_restaurants_data(bbox)
-
-        if poi_data:
-            display_poi_with_cluster(m, poi_data, icon_color)
-
-    # Onglet Ville 1
+    # ville 1
     with tab2:
-        st.header(f"📍 Informations détaillées : {ville_1}")
-        wiki_url_1 = f"https://fr.wikipedia.org/wiki/{ville_1.replace(' ', '_')}"
-        st.markdown(f"🔗 [Page Wikipédia de {ville_1}]({wiki_url_1})")
-
-        # Afficher la météo pour la ville 1
-        st.subheader("Météo actuelle")
-        get_weather(data_1['latitude'], data_1['longitude'], "6aea17a766b369d16fdcf84a0b16fdac")
-
-        # Sélecteur pour choisir les points d'intérêt à afficher
-        poi_options_ville_1 = st.multiselect(
-            "Sélectionnez les points d'intérêt à afficher :",
-            ["Gares", "Musées", "Restaurants"], 
-            key="poi_ville_1"
-        )
-
-        # Afficher la carte pour localiser la ville 1
-        if "latitude" in data_1 and "longitude" in data_1:
-            m = folium.Map(location=[data_1["latitude"], data_1["longitude"]], zoom_start=12)
-            folium.Marker(
-                location=[data_1["latitude"], data_1["longitude"]],
-                popup=ville_1,
-                tooltip=ville_1,
-                icon=folium.Icon(color="blue")
-            ).add_to(m)
-
-            # Récupérer et afficher les données des points d'intérêt sélectionnés
-            bbox = f"{data_1['latitude']-0.1},{data_1['longitude']-0.1},{data_1['latitude']+0.1},{data_1['longitude']+0.1}"
-            if "Gares" in poi_options_ville_1:
-                display_poi_on_map(m, data_1, bbox, "Gares", "green")
-            if "Musées" in poi_options_ville_1:
-                display_poi_on_map(m, data_1, bbox, "Musées", "purple")
-            if "Restaurants" in poi_options_ville_1:
-                display_poi_on_map(m, data_1, bbox, "Restaurants", "orange")
-
-            st_folium(m, width=700, height=400)
-        else:
-            st.warning("Données géographiques manquantes pour cette ville.")
-
-        st.write("### Démographie")
-        st.write(f"- Population 2021 : {int(pd.to_numeric(data_1['Population en 2021'], errors='coerce')):,}".replace(",", " "))
-        st.write(f"- Naissances 2015-2020 : {int(pd.to_numeric(data_1['Naissances entre 2015 et 2020'], errors='coerce')):,}".replace(",", " "))
-        st.write(f"- Décès 2015-2020 : {int(pd.to_numeric(data_1['Décès entre 2015 et 2020'], errors='coerce')):,}".replace(",", " "))
-
-        st.write("### Logement")
-        st.write(f"- Logements : {int(pd.to_numeric(data_1['Logements en 2021'], errors='coerce')):,}".replace(",", " "))
-        st.write(f"- Résidences principales : {int(pd.to_numeric(data_1['Résidences principales en 2021'], errors='coerce')):,}".replace(",", " "))
-        st.write(f"- Vacants : {int(pd.to_numeric(data_1['Logements vacants en 2021'], errors='coerce')):,}".replace(",", " "))
-
-        st.write("### Emploi et économie")
-        st.write(f"- Emplois : {int(pd.to_numeric(data_1['Emplois au LT en 2021'], errors='coerce')):,}".replace(",", " "))
-        st.write(f"- Chômeurs : {int(pd.to_numeric(data_1['Chômeurs 15-64 ans en 2021'], errors='coerce')):,}".replace(",", " "))
-        st.write(f"- Entreprises actives : {int(pd.to_numeric(data_1['Total des ets actifs fin 2022'], errors='coerce')):,}".replace(",", " "))
-
-        st.write("### Revenus")
-        # st.write(f"- Taux de pauvreté : {data_1['Taux de pauvreté en 2021']} %")
-        st.write(f"- Niveau de vie médian : {int(pd.to_numeric(data_1['Médiane du niveau vie en 2021'], errors='coerce')):,} €".replace(",", " "))
-
-        # Afficher les écoles pour la ville 1
-        st.write("### Établissements scolaires")
-        ecoles_ville_1 = df_etablissement[df_etablissement['Numéro Région'] == data_1['Région']]
-
-        # Utiliser des colonnes pour afficher la carte et le tableau côte à côte
-        col_map, col_table = st.columns(2)
-
-        with col_map:
-            if not ecoles_ville_1.empty:
-                m_ecoles = folium.Map(location=[ecoles_ville_1.iloc[0]['latitude_ecole'], ecoles_ville_1.iloc[0]['longitude_ecole']], zoom_start=12)
-
-                for _, ecole in ecoles_ville_1.iterrows():
-                    folium.Marker(
-                        location=[ecole['latitude_ecole'], ecole['longitude_ecole']],
-                        popup=ecole['libellé'],  # Remplacez par le nom de la colonne contenant le nom de l'école
-                        icon=folium.Icon(color="green")
-                    ).add_to(m_ecoles)
-
-                st_folium(m_ecoles, width=700, height=500)
-            else:
-                st.warning("Aucune école trouvée pour cette ville.")
-
-        with col_table:
-            st.dataframe(ecoles_ville_1)
-
-        # Afficher les données des points d'intérêt sélectionnés
-        if "Gares" in poi_options_ville_1:
-            st.write("### Gares")
-            gares_data_1 = get_gares_data(bbox)
-            if gares_data_1:
-                gares_df_1 = pd.DataFrame([
-                    {
-                        'name': element.get('tags', {}).get('name', 'N/A'),
-                        'latitude': element['lat'],
-                        'longitude': element['lon']
-                    }
-                    for element in gares_data_1['elements'] if 'lat' in element and 'lon' in element and 'name' in element.get('tags', {})
-                ])
-                st.dataframe(gares_df_1)
-            else:
-                st.warning("Aucune gare trouvée pour cette ville.")
-
-        if "Musées" in poi_options_ville_1:
-            st.write("### Musées")
-            musees_data_1 = get_musees_data(bbox)
-            if musees_data_1:
-                musees_df_1 = pd.DataFrame([
-                    {
-                        'name': element.get('tags', {}).get('name', 'N/A'),
-                        'latitude': element['lat'],
-                        'longitude': element['lon']
-                    }
-                    for element in musees_data_1['elements'] if 'lat' in element and 'lon' in element and 'name' in element.get('tags', {})
-                ])
-                st.dataframe(musees_df_1)
-            else:
-                st.warning("Aucun musée trouvé pour cette ville.")
-
-        if "Restaurants" in poi_options_ville_1:
-            st.write("### Restaurants")
-            restaurants_data_1 = get_restaurants_data(bbox)
-            if restaurants_data_1:
-                restaurants_df_1 = pd.DataFrame([
-                    {
-                        'name': element.get('tags', {}).get('name', 'N/A'),
-                        'latitude': element['lat'],
-                        'longitude': element['lon']
-                    }
-                    for element in restaurants_data_1['elements'] if 'lat' in element and 'lon' in element and 'name' in element.get('tags', {})
-                ])
-                st.dataframe(restaurants_df_1)
-            else:
-                st.warning("Aucun restaurant trouvé pour cette ville.")
-
-    # Onglet Ville 2
+        display_city_details(ville_1, data_1, df_etablissement, "poi_ville_1")
+    # ville 2
     with tab3:
-        st.header(f"📍 Informations détaillées : {ville_2}")
-        wiki_url_2 = f"https://fr.wikipedia.org/wiki/{ville_2.replace(' ', '_')}"
-        st.markdown(f"🔗 [Page Wikipédia de {ville_2}]({wiki_url_2})")
-
-        # Afficher la météo pour la ville 2
-        st.subheader("Météo actuelle")
-        get_weather(data_2['latitude'], data_2['longitude'], "6aea17a766b369d16fdcf84a0b16fdac")
-
-        # Sélecteur pour choisir les points d'intérêt à afficher
-        poi_options_ville_2 = st.multiselect(
-            "Sélectionnez les points d'intérêt à afficher :",
-            ["Gares", "Musées", "Restaurants"],
-            key="poi_ville_2"
-        )
-
-        # Afficher la carte pour localiser la ville 2
-        if "latitude" in data_2 and "longitude" in data_2:
-            m = folium.Map(location=[data_2["latitude"], data_2["longitude"]], zoom_start=12)
-            folium.Marker(
-                location=[data_2["latitude"], data_2["longitude"]],
-                popup=ville_2,
-                tooltip=ville_2,
-                icon=folium.Icon(color="blue")
-            ).add_to(m)
-
-            # Récupérer et afficher les données des points d'intérêt sélectionnés
-            bbox = f"{data_2['latitude']-0.1},{data_2['longitude']-0.1},{data_2['latitude']+0.1},{data_2['longitude']+0.1}"
-            if "Gares" in poi_options_ville_2:
-                display_poi_on_map(m, data_2, bbox, "Gares", "green")
-            if "Musées" in poi_options_ville_2:
-                display_poi_on_map(m, data_2, bbox, "Musées", "purple")
-            if "Restaurants" in poi_options_ville_2:
-                display_poi_on_map(m, data_2, bbox, "Restaurants", "orange")
-
-            st_folium(m, width=700, height=400)
-        else:
-            st.warning("Données géographiques manquantes pour cette ville.")
-
-        st.write("### Démographie")
-        st.write(f"- Population 2021 : {int(pd.to_numeric(data_2['Population en 2021'], errors='coerce')):,}".replace(",", " "))
-        st.write(f"- Naissances 2015-2020 : {int(pd.to_numeric(data_2['Naissances entre 2015 et 2020'], errors='coerce')):,}".replace(",", " "))
-        st.write(f"- Décès 2015-2020 : {int(pd.to_numeric(data_2['Décès entre 2015 et 2020'], errors='coerce')):,}".replace(",", " "))
-
-        st.write("### Logement")
-        st.write(f"- Logements : {int(pd.to_numeric(data_2['Logements en 2021'], errors='coerce')):,}".replace(",", " "))
-        st.write(f"- Résidences principales : {int(pd.to_numeric(data_2['Résidences principales en 2021'], errors='coerce')):,}".replace(",", " "))
-        st.write(f"- Vacants : {int(pd.to_numeric(data_2['Logements vacants en 2021'], errors='coerce')):,}".replace(",", " "))
-
-        st.write("### Emploi et économie")
-        st.write(f"- Emplois : {int(pd.to_numeric(data_2['Emplois au LT en 2021'], errors='coerce')):,}".replace(",", " "))
-        st.write(f"- Chômeurs : {int(pd.to_numeric(data_2['Chômeurs 15-64 ans en 2021'], errors='coerce')):,}".replace(",", " "))
-        st.write(f"- Entreprises actives : {int(pd.to_numeric(data_2['Total des ets actifs fin 2022'], errors='coerce')):,}".replace(",", " "))
-
-        st.write("### Revenus")
-        # st.write(f"- Taux de pauvreté : {data_2['Taux de pauvreté en 2021']} %")
-        st.write(f"- Niveau de vie médian : {int(pd.to_numeric(data_2['Médiane du niveau vie en 2021'], errors='coerce')):,} €".replace(",", " "))
-
-        # Afficher les écoles pour la ville 2
-        st.write("### Établissements scolaires")
-        ecoles_ville_2 = df_etablissement[df_etablissement['Numéro Région'] == data_2['Région']]
-
-        # Utiliser des colonnes pour afficher la carte et le tableau côte à côte
-        col_map, col_table = st.columns(2)
-
-        with col_map:
-            if not ecoles_ville_2.empty:
-                m_ecoles = folium.Map(location=[ecoles_ville_2.iloc[0]['latitude_ecole'], ecoles_ville_2.iloc[0]['longitude_ecole']], zoom_start=12)
-
-                for _, ecole in ecoles_ville_2.iterrows():
-                    folium.Marker(
-                        location=[ecole['latitude_ecole'], ecole['longitude_ecole']],
-                        popup=ecole['libellé'],  # Remplacez par le nom de la colonne contenant le nom de l'école
-                        icon=folium.Icon(color="green")
-                    ).add_to(m_ecoles)
-
-                st_folium(m_ecoles, width=700, height=500)
-            else:
-                st.warning("Aucune école trouvée pour cette ville.")
-
-        with col_table:
-            st.dataframe(ecoles_ville_2)
-
-        # Afficher les données des points d'intérêt sélectionnés
-        if "Gares" in poi_options_ville_2:
-            st.write("### Gares")
-            gares_data_2 = get_gares_data(bbox)
-            if gares_data_2:
-                gares_df_2 = pd.DataFrame([
-                    {
-                        'name': element.get('tags', {}).get('name', 'N/A'),
-                        'latitude': element['lat'],
-                        'longitude': element['lon']
-                    }
-                    for element in gares_data_2['elements'] if 'lat' in element and 'lon' in element and 'name' in element.get('tags', {})
-                ])
-                st.dataframe(gares_df_2)
-            else:
-                st.warning("Aucune gare trouvée pour cette ville.")
-
-        if "Musées" in poi_options_ville_2:
-            st.write("### Musées")
-            musees_data_2 = get_musees_data(bbox)
-            if musees_data_2:
-                musees_df_2 = pd.DataFrame([
-                    {
-                        'name': element.get('tags', {}).get('name', 'N/A'),
-                        'latitude': element['lat'],
-                        'longitude': element['lon']
-                    }
-                    for element in musees_data_2['elements'] if 'lat' in element and 'lon' in element and 'name' in element.get('tags', {})
-                ])
-                st.dataframe(musees_df_2)
-            else:
-                st.warning("Aucun musée trouvé pour cette ville.")
-
-        if "Restaurants" in poi_options_ville_2:
-            st.write("### Restaurants")
-            restaurants_data_2 = get_restaurants_data(bbox)
-            if restaurants_data_2:
-                restaurants_df_2 = pd.DataFrame([
-                    {
-                        'name': element.get('tags', {}).get('name', 'N/A'),
-                        'latitude': element['lat'],
-                        'longitude': element['lon']
-                    }
-                    for element in restaurants_data_2['elements'] if 'lat' in element and 'lon' in element and 'name' in element.get('tags', {})
-                ])
-                st.dataframe(restaurants_df_2)
-            else:
-                st.warning("Aucun restaurant trouvé pour cette ville.")
+        display_city_details(ville_2, data_2, df_etablissement, "poi_ville_2")
 
 except FileNotFoundError:
     st.error("❌ Fichier non trouvé : data/data_final.xlsx ou data/etablissement.csv")
