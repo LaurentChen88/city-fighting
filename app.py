@@ -195,14 +195,14 @@ def display_poi_on_map(m, bbox, poi_key, poi_type, icon_color):
 
 
 # fonction générique pour afficher les points d'intérêt
-def display_poi(city_name, data, poi_key):
+def display_poi(city_name, data):
     st.markdown(f"### {city_name}")
 
     # Sélecteur pour les points d'intérêt
     poi_options = st.multiselect(
         "Sélectionnez les points d'intérêt à afficher :",
         ["Gares", "Musées", "Restaurants"],
-        key=poi_key
+        key=f"poi_{city_name}"
     )
 
     # Afficher la carte
@@ -268,12 +268,12 @@ def display_formation(city_name, data, df_etablissement):
                 popup=ecole['libellé'],
                 icon=folium.Icon(color="green")
             ).add_to(m_ecoles)
-        st_folium(m_ecoles, width=700, height=500)
+        st_folium(m_ecoles, width=700, height=500, key=f"map_{city_name}")
     else:
         st.warning("Aucune école trouvée pour cette ville.")
 
     # Afficher le tableau
-    st.dataframe(ecoles)
+    st.dataframe(ecoles, key=f"table_{city_name}")
 
 
 # début de l'application
@@ -404,10 +404,10 @@ try:
         col_left, col_right = st.columns(2)
 
         with col_left:
-            display_poi(ville_1, data_1, "poi_ville_1")
+            display_poi(ville_1, data_1)
 
         with col_right:
-            display_poi(ville_2, data_2, "poi_ville_2")
+            display_poi(ville_2, data_2)
 
     with onglet_formation:
         st.subheader("🎓 Formation")
