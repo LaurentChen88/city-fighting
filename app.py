@@ -37,12 +37,12 @@ def load_etablissement_data(path):
 
 # Fonction pour obtenir la météo
 @st.cache_data # Cachez les résultats des appels API avec @st.cache_data pour éviter de refaire les mêmes requêtes à chaque exécution
-def get_weather(lat, lon, api_key):
+def get_weather(lat, lon):
     url = "https://api.openweathermap.org/data/2.5/weather"
     params = {
         'lat': lat,
         'lon': lon,
-        'appid': api_key,
+        'appid': "6aea17a766b369d16fdcf84a0b16fdac",
         'units': 'metric',
         'lang': 'fr'
     }
@@ -99,19 +99,6 @@ def display_poi_with_cluster(m, poi_data, icon_color):
                 popup=element.get('tags', {}).get('name', 'N/A'),
                 icon=folium.Icon(color=icon_color)
             ).add_to(cluster)
-
-
-# Fonction pour obtenir les coordonnées géographiques d'une ville à partir de son code INSEE
-@st.cache_data
-def get_coordinates_from_insee(code_insee):
-    url = f"https://api-adresse.data.gouv.fr/search/?q={code_insee}&type=municipality&autocomplete=0"
-    response = requests.get(url, verify=False)
-    if response.status_code == 200:
-        data = response.json()
-        if data['features']:
-            coords = data['features'][0]['geometry']['coordinates']
-            return coords[1], coords[0]  # Latitude, Longitude
-    return None, None
 
 
 # Fonction pour récupérer la latitude et longitude
@@ -229,10 +216,6 @@ def display_city_details(city_name, data, df_etablissement, poi_key):
     wiki_url = f"https://fr.wikipedia.org/wiki/{city_name.replace(' ', '_')}"
     st.markdown(f"🔗 [Page Wikipédia de {city_name}]({wiki_url})")
 
-    # Afficher la météo
-    st.subheader("Météo actuelle")
-    get_weather(data['latitude'], data['longitude'], "6aea17a766b369d16fdcf84a0b16fdac")
-
     # Sélecteur pour les points d'intérêt
     poi_options = st.multiselect(
         "Sélectionnez les points d'intérêt à afficher :",
@@ -303,6 +286,32 @@ def display_city_details(city_name, data, df_etablissement, poi_key):
     with col_table:
         st.dataframe(ecoles)
 
+# fonction pour récupérer les données générales 
+def get_general_data(data, city_name):
+    st.markdown(f"### {city_name}")
+    
+    wiki_url = f"https://fr.wikipedia.org/wiki/{city_name.replace(' ', '_')}"
+    st.markdown(f"🔗 [Page Wikipédia de {city_name}]({wiki_url})")
+
+    metrics = {
+        "Population 2021": ("Population en 2021", ""), 
+        "Superficie": ("Superficie", "km²"),
+        "Région": ("Région", ""),
+        "Département": ("Département", ""),
+        "Niveau de vie médian": ("Médiane du niveau vie en 2021", "€"),
+        "Naissances domiciliées en 2023": ("Nombre de naissances domiciliées en 2023", ""), 
+        "Décès domiciliés en 2023": ("Nombre de décès domiciliés en 2023", "")
+    }
+
+    for label, (column, unit) in metrics.items():
+        value = pd.to_numeric(data[column], errors='coerce')
+        if not pd.isna(value):
+            formatted_value = f"{int(value):,}".replace(",", " ")  # Formatage avec des espaces
+            st.metric(label, f"{formatted_value} {unit}".strip())  # Ajout de l'unité
+        else:
+            st.warning(f"Donnée manquante pour {label.lower()} de cette ville.")
+
+
 
 # début de l'application
 try:
@@ -332,7 +341,7 @@ try:
     update_coordinates(data_2, ville_2)
 
     # Onglets
-    tab1, tab2, tab3 = st.tabs(["🔍 Comparatif global", f"🏘️ {ville_1}", f"🏘️ {ville_2}"])
+    tab1, tab2, tab3, onglet_general, onglet_meteo = st.tabs(["🔍 Comparatif global", f"🏘️ {ville_1}", f"🏘️ {ville_2}", "📚 Données générales", "🌤️ Météo"])
 
     with tab1:
         st.subheader("🔍 Comparaison graphique")
@@ -385,9 +394,40 @@ try:
     # ville 1
     with tab2:
         display_city_details(ville_1, data_1, df_etablissement, "poi_ville_1")
+
     # ville 2
     with tab3:
         display_city_details(ville_2, data_2, df_etablissement, "poi_ville_2")
+
+    # onglet général
+    with onglet_general:
+        st.subheader("📚 Données générales")
+        col_left, col_right = st.columns(2)
+
+        with col_left:
+            get_general_data(data_1, ville_1)
+
+        with col_right:
+            get_general_data(data_2, ville_2)
+
+    # onglet météo
+    with onglet_meteo:
+        st.subheader("🌤️ Météo actuelle")
+        
+        col_left, col_right = st.columns(2)
+
+        with col_left:
+            if "latitude" in data_1 and "longitude" in data_1:
+                get_weather(data_1['latitude'], data_1['longitude'])
+            else:
+                st.warning("Données géographiques manquantes pour cette ville.")
+
+        with col_right:
+            if "latitude" in data_2 and "longitude" in data_2:
+                get_weather(data_2['latitude'], data_2['longitude'])
+            else:
+                st.warning("Données géographiques manquantes pour cette ville.")
+
 
 except FileNotFoundError:
     st.error("❌ Fichier non trouvé : data/data_final.xlsx ou data/etablissement.csv")
