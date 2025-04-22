@@ -11,8 +11,101 @@ from folium.plugins import MarkerCluster
 st.set_page_config(
     page_title="City Fighting",
     page_icon="🏙️",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="expanded"
 )
+
+# Thème personnalisé
+st.markdown("""
+    <style>
+    /* Thème de couleurs */
+    :root {
+        --primary-color: #1E90FF;
+        --secondary-color: #D1D1D1;
+        --background-color: #F0F0F0;
+        --text-color: #333333;
+        --font-family: 'Arial', sans-serif;
+    }
+
+    /* Style de la page */
+    body {
+        background-color: var(--background-color);
+        color: var(--text-color);
+        font-family: var(--font-family);
+    }
+
+    /* Style des titres */
+    h1, h2, h3, h4, h5, h6 {
+        color: var(--primary-color);
+    }
+
+    /* Style des boutons */
+    .stButton > button {
+        background-color: var(--primary-color);
+        color: white;
+        border: none;
+        border-radius: 5px;
+        padding: 10px 20px;
+        font-size: 16px;
+    }
+
+    .stButton > button:hover {
+        background-color: var(--secondary-color);
+    }
+
+    /* Style des cartes */
+    .stCard {
+        background-color: white;
+        border-radius: 10px;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        padding: 20px;
+        margin-bottom: 20px;
+    }
+
+    /* Style des graphiques */
+    .stPlotlyChart {
+        border-radius: 10px;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+    }
+    </style>
+""", unsafe_allow_html=True)
+
+# Bouton pour basculer entre mode clair et mode sombre
+dark_mode = st.checkbox("Activer le mode sombre")
+
+if dark_mode:
+    st.markdown("""
+        <style>
+        :root {
+            --background-color: #1E1E1E;
+            --text-color: #FFFFFF;
+            --primary-color: #BB86FC;
+            --secondary-color: #03DAC6;
+        }
+        body {
+            background-color: var(--background-color);
+            color: var(--text-color);
+        }
+        h1, h2, h3, h4, h5, h6 {
+            color: var(--primary-color);
+        }
+        .stButton > button {
+            background-color: var(--primary-color);
+            color: white;
+        }
+        .stButton > button:hover {
+            background-color: var(--secondary-color);
+        }
+        .stCard {
+            background-color: #333333;
+            color: white;
+        }
+        .stPlotlyChart {
+            background-color: #333333;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
 # Titre
 st.title("🏙️ City Fighting - Comparateur de deux villes en France")
 
@@ -117,6 +210,21 @@ def get_coordinates(city_name):
         print(f"Erreur lors de la récupération des coordonnées pour {city_name}: {e}")
         return None, None
 
+# Fonction pour récupérer la population à partir du code INSEE
+def get_population_by_insee(insee_code):
+    url = f"https://geo.api.gouv.fr/communes/{insee_code}?fields=nom,code,population"
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        data = response.json()
+        return data
+    except requests.exceptions.RequestException as e:
+        print(f"Erreur lors de la requête: {e}")
+        return None
+    except ValueError as e:
+        print(f"Erreur lors du décodage JSON: {e}")
+        return None
+
 # Vérifier si les coordonnées manquent et les récupérer si nécessaire
 def update_coordinates(data, city_name):
     if pd.isna(data['longitude']) or pd.isna(data['latitude']):
@@ -124,6 +232,13 @@ def update_coordinates(data, city_name):
         if latitude is not None and longitude is not None:
             data['latitude'] = latitude
             data['longitude'] = longitude
+
+    # Mettre à jour la population
+    if 'code_commune_INSEE' in data:
+        insee_code = data['code_commune_INSEE']
+        population_data = get_population_by_insee(insee_code)
+        if population_data and 'population' in population_data:
+            data['Population'] = population_data['population']
 
 def create_comparison_graph(data_1, data_2, metrics, ville_1, ville_2):
     """
@@ -193,14 +308,14 @@ def display_poi_on_map(m, bbox, poi_key, poi_type, icon_color):
     if poi_data:
         display_poi_with_cluster(m, poi_data, icon_color)
 
-# fonction générique pour afficher les points d'intérêt
+# Fonction générique pour afficher les points d'intérêt
 def display_poi(city_name, data):
     st.markdown(f"### {city_name}")
 
     # Sélecteur pour les points d'intérêt
     poi_options = st.multiselect(
         "Sélectionnez les points d'intérêt à afficher :",
-        ["Gares", "Musées", "Restaurants"],
+        ["Gares", "Musées", "Restaurants", "Salles de sport"],  # Ajout de "Salles de sport"
         key=f"poi_{city_name}"
     )
 
@@ -222,12 +337,14 @@ def display_poi(city_name, data):
             display_poi_on_map(m, bbox, "tourism", "museum", "purple")
         if "Restaurants" in poi_options:
             display_poi_on_map(m, bbox, "amenity", "restaurant", "orange")
+        if "Salles de sport" in poi_options:
+            display_poi_on_map(m, bbox, "leisure", "sports_centre", "red")  # Ajout des salles de sport
 
         st_folium(m, width=700, height=400)
     else:
         st.warning("Données géographiques manquantes pour cette ville.")
 
-# fonction générique qui prend en paramètre les métriques à afficher et les données associées
+# Fonction générique qui prend en paramètre les métriques à afficher et les données associées
 def display_metrics(data, city_name, metrics, wiki_url=False):
     """
     Affiche des métriques génériques pour une ville.
@@ -252,7 +369,7 @@ def display_metrics(data, city_name, metrics, wiki_url=False):
         else:
             st.warning(f"Donnée manquante pour {label.lower()} de cette ville.")
 
-# fonction générique pour afficher les formations
+# Fonction générique pour afficher les formations
 def display_formation(city_name, data, df_etablissement):
     st.markdown(f"### {city_name}")
     ecoles = df_etablissement[df_etablissement['Numéro Région'] == data['Région']]
@@ -296,12 +413,15 @@ def display_security_poi(city_name, data):
     else:
         st.warning("Données géographiques manquantes pour cette ville.")
 
-# début de l'application
+# Début de l'application
 try:
     df = load_data(file_path)
     df_etablissement = load_etablissement_data(etablissement_path)
 
-    # filtrez les villes avec une population supérieure à 20 000
+    # Ajouter une colonne "Population" avec des valeurs par défaut (NaN)
+    df['Population'] = pd.NaT
+
+    # Filtrez les villes avec une population supérieure à 20 000
     df = df[pd.to_numeric(df['Population en 2021'], errors='coerce') > 20000]
 
     # Enlever les doublons basés sur 'code_commune_INSEE'
@@ -337,12 +457,12 @@ try:
          "🚨 Sécurité"
          ])
 
-    # onglet général
+    # Onglet général
     with onglet_general:
         st.subheader("🔍 Données générales")
 
         general_metrics = {
-            "Population 2021": ("Population en 2021", ""),
+            "Population": ("Population", ""),
             "Superficie": ("Superficie", "km²"),
             "Région": ("Région", ""),
             "Département": ("Département", ""),
@@ -361,7 +481,7 @@ try:
         fig = create_comparison_graph(data_1, data_2, general_metrics, ville_1, ville_2)
         st.plotly_chart(fig, use_container_width=True)
 
-    # onglet emploi
+    # Onglet emploi
     with onglet_emploi:
         st.subheader("💼 Emploi")
 
@@ -381,7 +501,7 @@ try:
         fig = create_comparison_graph(data_1, data_2, emploi_metrics, ville_1, ville_2)
         st.plotly_chart(fig, use_container_width=True)
 
-    # onglet logement
+    # Onglet logement
     with onglet_logement:
         st.subheader("🏠 Logement")
 
@@ -401,7 +521,7 @@ try:
         fig = create_comparison_graph(data_1, data_2, logement_metrics, ville_1, ville_2)
         st.plotly_chart(fig, use_container_width=True)
 
-    # onglet météo
+    # Onglet météo
     with onglet_meteo:
         st.subheader("🌤️ Prévisions météo pour les 3 prochains jours")
 
@@ -426,7 +546,7 @@ try:
             else:
                 st.warning("Données géographiques manquantes pour cette ville.")
 
-    # onglet points d'intérêt
+    # Onglet points d'intérêt
     with onglet_poi:
         st.subheader("📍 Points d'intérêt")
         col_left, col_right = st.columns(2)
@@ -447,7 +567,7 @@ try:
         with col_right:
             display_formation(ville_2, data_2, df_etablissement)
 
-    # onglet sécurité
+    # Onglet sécurité
     with onglet_securite:
         st.subheader("🚨 Sécurité")
         col_left, col_right = st.columns(2)
