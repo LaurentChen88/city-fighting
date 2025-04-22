@@ -22,8 +22,8 @@ st.markdown("""
     :root {
         --primary-color: #1E90FF;
         --secondary-color: #D1D1D1;
-        --background-color: #FFFFFF;
-        --text-color: #000000;
+        --background-color: #F0F0F0;
+        --text-color: #333333;
         --font-family: 'Arial', sans-serif;
     }
 
@@ -70,8 +70,41 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+# Bouton pour basculer entre mode clair et mode sombre
+dark_mode = st.checkbox("Activer le mode sombre")
 
-
+if dark_mode:
+    st.markdown("""
+        <style>
+        :root {
+            --background-color: #1E1E1E;
+            --text-color: #FFFFFF;
+            --primary-color: #BB86FC;
+            --secondary-color: #03DAC6;
+        }
+        body {
+            background-color: var(--background-color);
+            color: var(--text-color);
+        }
+        h1, h2, h3, h4, h5, h6 {
+            color: var(--primary-color);
+        }
+        .stButton > button {
+            background-color: var(--primary-color);
+            color: white;
+        }
+        .stButton > button:hover {
+            background-color: var(--secondary-color);
+        }
+        .stCard {
+            background-color: #333333;
+            color: white;
+        }
+        .stPlotlyChart {
+            background-color: #333333;
+        }
+        </style>
+    """, unsafe_allow_html=True)
 
 # Titre
 st.title("🏙️ City Fighting - Comparateur de deux villes en France")
@@ -385,9 +418,6 @@ try:
     df = load_data(file_path)
     df_etablissement = load_etablissement_data(etablissement_path)
 
-    # Ajouter une colonne "Population" avec des valeurs par défaut (NaN)
-    df['Population'] = pd.NaT
-
     # Filtrez les villes avec une population supérieure à 20 000
     df = df[pd.to_numeric(df['Population en 2021'], errors='coerce') > 20000]
 
@@ -532,7 +562,7 @@ try:
             display_formation(ville_1, data_1, df_etablissement)
 
         with col_right:
-            display_formation(ville_2, ville_2, df_etablissement)
+            display_formation(ville_2, data_2, df_etablissement)
 
     # Onglet sécurité
     with onglet_securite:
