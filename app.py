@@ -6,6 +6,9 @@ from streamlit_folium import st_folium
 import requests
 from geopy.geocoders import Nominatim
 from folium.plugins import MarkerCluster
+from collections import defaultdict, Counter
+import plotly.graph_objects as go
+from datetime import datetime
 
 # Configuration de la page
 st.set_page_config(
@@ -14,62 +17,6 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
-
-# Thème personnalisé
-st.markdown("""
-    <style>
-    /* Thème de couleurs */
-    :root {
-        --primary-color: #1E90FF;
-        --secondary-color: #D1D1D1;
-        --background-color: #F0F0F0;
-        --text-color: #333333;
-        --font-family: 'Arial', sans-serif;
-    }
-
-    /* Style de la page */
-    body {
-        background-color: var(--background-color);
-        color: var(--text-color);
-        font-family: var(--font-family);
-    }
-
-    /* Style des titres */
-    h1, h2, h3, h4, h5, h6 {
-        color: var(--primary-color);
-    }
-
-    /* Style des boutons */
-    .stButton > button {
-        background-color: var(--primary-color);
-        color: white;
-        border: none;
-        border-radius: 5px;
-        padding: 10px 20px;
-        font-size: 16px;
-    }
-
-    .stButton > button:hover {
-        background-color: var(--secondary-color);
-    }
-
-    /* Style des cartes */
-    .stCard {
-        background-color: white;
-        border-radius: 10px;
-        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-        padding: 20px;
-        margin-bottom: 20px;
-    }
-
-    /* Style des graphiques */
-    .stPlotlyChart {
-        border-radius: 10px;
-        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-    }
-    </style>
-""", unsafe_allow_html=True)
-
 
 # Titre
 st.title("🏙️ City Fighting - Comparateur de deux villes en France")
@@ -90,46 +37,155 @@ def load_etablissement_data(path):
     return pd.read_csv(path)
 
 # Fonction pour obtenir la météo
+# L'API OpenWeather renvoie les prévisions horaires pour 5 jours avec un intervalle de 3 heures
 @st.cache_data
-def get_weather(lat, lon, selected_hours):
+def get_weather(lat, lon):
     url = "https://api.openweathermap.org/data/2.5/forecast"
     params = {
         'lat': lat,
         'lon': lon,
         'appid': "6aea17a766b369d16fdcf84a0b16fdac",
         'units': 'metric',
-        'lang': 'fr',
-        'cnt': 9  # Récupérer les prévisions pour les 3 prochains jours (3 jours * 3 intervalles par jour)
+        'lang': 'fr'
     }
 
     try:
         response = requests.get(url, params=params)
         response.raise_for_status()
         data = response.json()
+        # st.write(data)
+        if "list" not in data:
+            st.warning("⚠️ Données météo incomplètes.")
+            return
 
-        if "list" in data:
-            st.write(f"📍 Météo à {data['city']['name']}")
-            for forecast in data['list']:
-                forecast_time = pd.to_datetime(forecast['dt_txt'])
-                if forecast_time.hour in selected_hours:
-                    date = forecast_time.strftime('%d/%m/%Y %H:%M')
-                    temp = int(round(forecast['main']['temp']))
-                    feels_like = int(round(forecast['main']['feels_like']))
-                    description = forecast['weather'][0]['description']
-                    st.write(f"📅 **{date}**")
-                    st.write(f"🌡️ Température : {temp}°C")
-                    st.write(f"🤔 Ressentie : {feels_like}°C")
-                    st.write(f"🌤️ Conditions : {description}")
-                    st.write("---")
-        else:
-            st.write("⚠️ Données météo incomplètes.")
+        st.write(f"📍 Météo à {data['city']['name']}")
+
+        # Grouper les prévisions par date
+        daily_data = defaultdict(list)
+        for forecast in data['list']:
+            dt = pd.to_datetime(forecast['dt_txt'])
+            daily_data[dt.date()].append(forecast)
+
+        for date, forecasts in daily_data.items():
+            # Convertir la date dans daily_data en string au format 'YYYY-MM-DD'
+            date_obj = pd.to_datetime(date).strftime('%Y-%m-%d')  # Convertir en string pour la comparaison
+            day_name = pd.to_datetime(date).strftime('%A %d/%m')  # Définir day_name à partir de la date
+
+            # Températures et conditions des prévisions horaires
+            temps = [f['main']['temp'] for f in forecasts]
+            conditions_en = [f['weather'][0]['main'] for f in forecasts]
+            conditions_fr = [f['weather'][0]['description'] for f in forecasts]
+            icons = [f['weather'][0]['icon'] for f in forecasts]
+
+            # Température actuelle uniquement pour aujourd'hui
+            current_date = datetime.today().strftime('%Y-%m-%d')  # Date actuelle au format 'YYYY-MM-DD'
+            
+            # Vérification si la date correspond à aujourd'hui (en s'assurant que les deux valeurs sont des strings)
+            if date_obj == current_date:
+                current_temp = int(temps[0])  # La première température des prévisions horaires correspond à la température actuelle
+            else:
+                current_temp = None  # Pas de température actuelle pour les autres jours
+
+            # Température minimale et maximale pour la journée (pour tous les jours)
+            temp_min = int(min(temps))
+            temp_max = int(max(temps))
+
+            # Condition météorologique majoritaire
+            condition_majoritaire_en = Counter(conditions_en).most_common(1)[0][0]
+            condition_majoritaire_fr = Counter(conditions_fr).most_common(1)[0][0]
+            icon_majoritaire = Counter(icons).most_common(1)[0][0]
+            icon_url = f"http://openweathermap.org/img/wn/{icon_majoritaire}@2x.png"
+
+            # Vitesse du vent pour le jour
+            wind_speed = sum(f['wind']['speed'] for f in forecasts) / len(forecasts)  # Moyenne des vitesses du vent sur la journée en m/s
+            wind_speed_kmh = wind_speed * 3.6  # Conversion m/s en km/h
+
+            # Emoji correspondant à la condition météorologique
+            weather_emojis = {
+                "Clear": "☀️",
+                "Clouds": "☁️",
+                "Rain": "🌧️",
+                "Drizzle": "🌦️",
+                "Thunderstorm": "⛈️",
+                "Snow": "❄️",
+                "Mist": "🌫️",
+                "Fog": "🌫️",
+                "Haze": "🌫️",
+                "Smoke": "💨",
+                "Dust": "🌪️",
+                "Sand": "🏜️",
+                "Ash": "🌋",
+                "Squall": "🌬️",
+                "Tornado": "🌪️"
+            }
+
+            # Choisir l'emoji en fonction de la condition météo majoritaire
+            emoji = weather_emojis.get(condition_majoritaire_en, "🌈")
+
+            # Affichage dans les colonnes
+            col1, col2, col3 = st.columns([3, 1, 2])
+            col1.markdown(f"### 📅 {day_name}")
+            col2.image(icon_url, width=60)  # Icône OpenWeather
+
+            # Si c'est aujourd'hui, affiche la température actuelle
+            if current_temp is not None:
+                wind_speed = forecasts[0]['wind']['speed']  # Vitesse du vent en m/s
+                col3.markdown(f"🌡️ Température actuelle : **{current_temp}°C**  \n{emoji} **{condition_majoritaire_fr}**  \n💨 Vent : **{wind_speed_kmh:.1f} km/h**")
+            else:
+                col3.markdown(f"🌡️ Max : **{temp_max}°C**  \n❄️ Min : **{temp_min}°C**  \n{emoji} **{condition_majoritaire_fr}**  \n💨 Vent : **{wind_speed_kmh:.1f} km/h**")
+
+
+            # Détail graphique avec bouton
+            with st.expander("📊 Voir le détail"):
+                heures = [pd.to_datetime(f['dt_txt']).strftime('%H:%M') for f in forecasts]
+                temp_h = [round(f['main']['temp']) for f in forecasts]  # Arrondir la température
+
+                # Création du graphique avec Plotly
+                fig = go.Figure()
+
+                # Ajout des points avec tooltips
+                fig.add_trace(go.Scatter(
+                    x=heures,
+                    y=temp_h,
+                    mode='markers+lines',
+                    marker=dict(color='royalblue', size=8),
+                    text=[f"Temps: {t}°C" for t in temp_h],  # Tooltip avec la température
+                    hoverinfo='text',  # Affichage uniquement du texte
+                ))
+
+                # Titre et labels avec une meilleure mise en forme
+                fig.update_layout(
+                    title=f'Température - {day_name}',
+                    title_x=0.5,
+                    title_font=dict(size=16, family='Arial', color='darkslategray'),
+                    xaxis_title='Heure',
+                    yaxis_title='Température (°C)',
+                    xaxis=dict(
+                        tickangle=45,
+                        showgrid=False,  # Retirer les lignes de grille sur l'axe X
+                    ),
+                    yaxis=dict(
+                        showgrid=False,  # Retirer les lignes de grille sur l'axe Y
+                    ),
+                    template="plotly_white",  # Thème clair sans grille
+                    height=500,
+                    plot_bgcolor='white',  # Enlever le fond de la grille
+                )
+
+                # Affichage du graphique interactif
+                st.plotly_chart(fig)
+
+                # Séparateur
+                st.markdown("---")
 
     except requests.exceptions.HTTPError as err:
-        st.write("❌ Erreur HTTP :", err)
+        st.error(f"❌ Erreur HTTP : {err}")
     except requests.exceptions.RequestException as err:
-        st.write("❌ Erreur de requête :", err)
+        st.error(f"❌ Erreur de requête : {err}")
     except Exception as e:
-        st.write("❌ Erreur inattendue :", e)
+        st.error(f"❌ Erreur inattendue : {e}")
+
+
 
 # Fonction générique pour récupérer les données des points d'intérêt (gares, musées, restaurants, etc.) à l'aide de l'API Overpass
 @st.cache_data
@@ -280,7 +336,7 @@ def display_poi(city_name, data):
     # Sélecteur pour les points d'intérêt
     poi_options = st.multiselect(
         "Sélectionnez les points d'intérêt à afficher :",
-        ["Gares", "Musées", "Restaurants", "Salles de sport"],  # Ajout de "Salles de sport"
+        ["Gares", "Musées", "Restaurants", "Centres sportifs"],
         key=f"poi_{city_name}"
     )
 
@@ -302,8 +358,8 @@ def display_poi(city_name, data):
             display_poi_on_map(m, bbox, "tourism", "museum", "purple")
         if "Restaurants" in poi_options:
             display_poi_on_map(m, bbox, "amenity", "restaurant", "orange")
-        if "Salles de sport" in poi_options:
-            display_poi_on_map(m, bbox, "leisure", "sports_centre", "red")  # Ajout des salles de sport
+        if "Centres sportifs" in poi_options:
+            display_poi_on_map(m, bbox, "leisure", "sports_centre", "red") 
 
         st_folium(m, width=700, height=400)
     else:
@@ -341,18 +397,25 @@ def display_formation(city_name, data, df_etablissement):
 
     # Afficher la carte
     if not ecoles.empty:
+        # Initialisation de la carte
         m_ecoles = folium.Map(location=[ecoles.iloc[0]['latitude_ecole'], ecoles.iloc[0]['longitude_ecole']], zoom_start=12)
+
+        # Cluster des marqueurs
+        cluster = MarkerCluster().add_to(m_ecoles)
+
         for _, ecole in ecoles.iterrows():
             folium.Marker(
                 location=[ecole['latitude_ecole'], ecole['longitude_ecole']],
                 popup=ecole['libellé'],
                 icon=folium.Icon(color="green")
-            ).add_to(m_ecoles)
+            ).add_to(cluster)
+
+        # Affichage avec Streamlit
         st_folium(m_ecoles, width=700, height=500, key=f"map_{city_name}")
     else:
         st.warning("Aucune école trouvée pour cette ville.")
 
-    # Afficher le tableau
+    # Afficher le tableau des écoles
     st.dataframe(ecoles, key=f"table_{city_name}")
 
 # Fonction pour afficher les postes de police et de pompiers
@@ -426,8 +489,6 @@ try:
         general_metrics = {
             "Population": ("Population", ""),
             "Superficie": ("Superficie", "km²"),
-            "Région": ("Région", ""),
-            "Département": ("Département", ""),
             "Niveau de vie médian": ("Médiane du niveau vie en 2021", "€"),
             "Naissances domiciliées en 2023": ("Nombre de naissances domiciliées en 2023", ""),
             "Décès domiciliés en 2023": ("Nombre de décès domiciliés en 2023", "")
@@ -485,26 +546,19 @@ try:
 
     # Onglet météo
     with onglet_meteo:
-        st.subheader("🌤️ Prévisions météo pour les 3 prochains jours")
-
-        # Sélecteur d'heures
-        selected_hours = st.multiselect(
-            "Sélectionnez les heures pour lesquelles vous souhaitez voir les prévisions :",
-            options=[15, 0, 9],
-            default=[15, 0, 9]
-        )
+        st.subheader("🌤️ Météo")
 
         col_left, col_right = st.columns(2)
 
         with col_left:
             if "latitude" in data_1 and "longitude" in data_1:
-                get_weather(data_1['latitude'], data_1['longitude'], selected_hours)
+                get_weather(data_1['latitude'], data_1['longitude'])
             else:
                 st.warning("Données géographiques manquantes pour cette ville.")
 
         with col_right:
             if "latitude" in data_2 and "longitude" in data_2:
-                get_weather(data_2['latitude'], data_2['longitude'], selected_hours)
+                get_weather(data_2['latitude'], data_2['longitude'])
             else:
                 st.warning("Données géographiques manquantes pour cette ville.")
 
