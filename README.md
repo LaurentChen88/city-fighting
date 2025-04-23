@@ -48,4 +48,4 @@ Détails : https://fxjollois.github.io/cours-2024-2025/but3--vcod--fa--sae-final
 - Thomas BELAID
 - Mohammed BOUKOUIREN
 
-  3FA VCOD GRP 33
+  3FA SD VCOD GROUPE 33
