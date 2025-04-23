@@ -19,7 +19,7 @@ st.set_page_config(
 )
 
 # Titre
-st.title("🏙️ City Fighting - Comparateur de deux villes en France")
+st.title("🏙️ City Fighting - Comparateur de villes en France")
 
 # Initialisation du géolocaliseur
 geolocator = Nominatim(user_agent="mon_application")
@@ -261,51 +261,58 @@ def update_coordinates(data, city_name):
         if population_data and 'population' in population_data:
             data['Population'] = population_data['population']
 
-def create_comparison_graph(data_1, data_2, metrics, ville_1, ville_2):
+def create_comparison_graph(city_data_list, metrics, city_names):
     """
-    Crée un graphique comparatif basé sur les métriques fournies.
+    Crée un graphique comparatif basé sur les métriques fournies pour plusieurs villes.
 
-    :param data_1: Données de la première ville
-    :param data_2: Données de la deuxième ville
+    :param city_data_list: Liste des données des villes
     :param metrics: Dictionnaire des métriques (clé: label, valeur: (colonne, unité))
-    :param ville_1: Nom de la première ville
-    :param ville_2: Nom de la deuxième ville
+    :param city_names: Liste des noms des villes
     :return: Graphique Plotly
     """
-    # Création du DataFrame initial
-    graphe_data = pd.DataFrame({
-        "Variable": list(metrics.keys()),  # Utilise les labels des métriques
-        f"{ville_1}_original": [pd.to_numeric(data_1[column], errors='coerce') for column, _ in metrics.values()],
-        f"{ville_2}_original": [pd.to_numeric(data_2[column], errors='coerce') for column, _ in metrics.values()],
-    })
-
+    # Initialisation du DataFrame
+    df_data = {
+        "Variable": list(metrics.keys())  # Utilise les labels des métriques
+    }
+    
+    # Ajout des valeurs originales pour chaque ville
+    for i, (data, name) in enumerate(zip(city_data_list, city_names)):
+        df_data[f"{name}_original"] = [pd.to_numeric(data[column], errors='coerce') for column, _ in metrics.values()]
+    
+    # Création du DataFrame
+    graphe_data = pd.DataFrame(df_data)
+    
     # Remplacer les valeurs NaN par 0 pour éviter les erreurs dans les calculs
     graphe_data.fillna(0, inplace=True)
-
-    # Ajouter les colonnes normalisées
-    graphe_data[ville_1] = graphe_data[f"{ville_1}_original"] / (
-        graphe_data[f"{ville_1}_original"] + graphe_data[f"{ville_2}_original"]
-    )
-    graphe_data[ville_2] = graphe_data[f"{ville_2}_original"] / (
-        graphe_data[f"{ville_1}_original"] + graphe_data[f"{ville_2}_original"]
-    )
-
+    
+    # Normalisation des valeurs pour chaque variable
+    for var_idx in range(len(metrics)):
+        total = sum(graphe_data.iloc[var_idx][f"{name}_original"] for name in city_names)
+        if total > 0:  # Éviter division par zéro
+            for name in city_names:
+                graphe_data.at[var_idx, name] = graphe_data.iloc[var_idx][f"{name}_original"] / total
+        else:
+            for name in city_names:
+                graphe_data.at[var_idx, name] = 0
+    
     # Arrondir les colonnes normalisées
-    graphe_data[ville_1] = graphe_data[ville_1].round(2)
-    graphe_data[ville_2] = graphe_data[ville_2].round(2)
-
+    for name in city_names:
+        graphe_data[name] = graphe_data[name].round(2)
+    
     # Transformation pour le graphe
+    id_vars = ["Variable"] + [f"{name}_original" for name in city_names]
     graphe_data = graphe_data.melt(
-        id_vars=["Variable", f"{ville_1}_original", f"{ville_2}_original"],
+        id_vars=id_vars,
+        value_vars=city_names,
         var_name="Ville",
         value_name="Valeur"
     )
-
-    # Ajouter une colonne pour les valeurs originales dans le hover et arrondir
+    
+    # Ajouter une colonne pour les valeurs originales dans le hover
     graphe_data["Valeur_originale"] = graphe_data.apply(
-        lambda row: row[f"{ville_1}_original"] if row["Ville"] == ville_1 else row[f"{ville_2}_original"], axis=1
+        lambda row: row[f"{row['Ville']}_original"], axis=1
     ).round(2)
-
+    
     # Création du graphe
     fig = px.bar(
         graphe_data,
@@ -315,10 +322,10 @@ def create_comparison_graph(data_1, data_2, metrics, ville_1, ville_2):
         barmode="group",
         title="📉 Comparatif des indicateurs clés (normalisé)",
         hover_data={
-            "Valeur_originale": True,  # Affiche la valeur réelle arrondie
-            "Valeur": True,            # Affiche la valeur normalisée arrondie
-            "Variable": True,          # Affiche la variable
-            "Ville": True              # Affiche la ville
+            "Valeur_originale": True,
+            "Valeur": True,
+            "Variable": True,
+            "Ville": True
         }
     )
     return fig
@@ -458,29 +465,63 @@ try:
         lambda row: f"{row['Libellé commune ou ARM']} ({row['Département']})", axis=1
     )
 
+    # Initialisation de la session state pour les villes
+    if 'num_cities' not in st.session_state:
+        st.session_state.num_cities = 2  # Par défaut, 2 villes
+    
     # Sélection des villes
     villes = sorted(df["Libellé commune ou ARM"].unique())
-    col1, col2 = st.columns(2)
-    with col1:
-        ville_1 = st.selectbox("1️⃣ Sélectionnez la première ville :", villes)
-    with col2:
-        ville_2 = st.selectbox("2️⃣ Sélectionnez la deuxième ville :", villes, index=1)
-    data_1 = df[df["Libellé commune ou ARM"] == ville_1].squeeze()
-    data_2 = df[df["Libellé commune ou ARM"] == ville_2].squeeze()
-
-    update_coordinates(data_1, ville_1)
-    update_coordinates(data_2, ville_2)
+    
+    # Container pour aligner les sélecteurs et les boutons
+    st.write("### Sélection des villes")
+    city_selectors = st.container()
+    
+    # Création de colonnes pour les sélecteurs de villes et les boutons + et -
+    with city_selectors:
+        # Calculer les largeurs des colonnes pour les sélecteurs et les boutons
+        # Les boutons prennent moins d'espace que les sélecteurs
+        col_widths = [1] * st.session_state.num_cities + [0.15, 0.15]  # Ajout d'une colonne pour le bouton -
+        cols = st.columns(col_widths)
+        
+        # Ajout des sélecteurs de villes
+        city_data = []
+        city_names = []
+        
+        for i in range(st.session_state.num_cities):
+            with cols[i]:
+                index = min(i, len(villes)-1)  # Pour éviter l'erreur d'index
+                selected_city = st.selectbox(f"{i+1}️⃣ Ville {i+1}", villes, index=index, key=f"city_{i}")
+                city_data.append(df[df["Libellé commune ou ARM"] == selected_city].squeeze())
+                city_names.append(selected_city)
+                update_coordinates(city_data[i], city_names[i])
+        
+        # Bouton + à côté des sélecteurs
+        with cols[-2]:
+            # Ajouter un espace pour aligner le bouton verticalement avec les sélecteurs
+            st.write("")
+            if st.button("➕", key="add_city_button", help="Ajouter une ville supplémentaire à comparer"):
+                if st.session_state.num_cities < 4:  # Limite à 5 villes pour éviter les problèmes d'affichage
+                    st.session_state.num_cities += 1
+                    st.rerun()  # Utilisation de st.rerun() au lieu de st.experimental_rerun()
+        
+        # Bouton - à côté du bouton +
+        with cols[-1]:
+            st.write("")
+            if st.button("➖", key="remove_city_button", help="Enlever une ville de la comparaison"):
+                if st.session_state.num_cities > 2:  # Garder au moins 2 villes pour la comparaison
+                    st.session_state.num_cities -= 1
+                    st.rerun()  # Utilisation de st.rerun() au lieu de st.experimental_rerun()
 
     # Onglets
     onglet_general, onglet_emploi, onglet_logement, onglet_meteo, onglet_poi, onglet_formation, onglet_securite = st.tabs([
         f"🔍 Données générales",
-         "💼 Emploi",
-         "🏠 Logement",
-         "🌤️ Météo",
-         "📍 Points d'intérêt",
-         "🎓 Formation",
-         "🚨 Sécurité"
-         ])
+        "💼 Emploi",
+        "🏠 Logement",
+        "🌤️ Météo",
+        "📍 Points d'intérêt",
+        "🎓 Formation",
+        "🚨 Sécurité"
+    ])
 
     # Onglet général
     with onglet_general:
@@ -493,15 +534,15 @@ try:
             "Naissances domiciliées en 2023": ("Nombre de naissances domiciliées en 2023", ""),
             "Décès domiciliés en 2023": ("Nombre de décès domiciliés en 2023", "")
         }
-        col_left, col_right = st.columns(2)
-
-        with col_left:
-            display_metrics(data_1, ville_1, general_metrics, True)
-
-        with col_right:
-            display_metrics(data_2, ville_2, general_metrics, True)
-
-        fig = create_comparison_graph(data_1, data_2, general_metrics, ville_1, ville_2)
+        
+        # Créer des colonnes en fonction du nombre de villes
+        cols = st.columns(st.session_state.num_cities)
+        for i, (col, data, name) in enumerate(zip(cols, city_data, city_names)):
+            with col:
+                display_metrics(data, name, general_metrics, True)
+        
+        # Graphique comparatif
+        fig = create_comparison_graph(city_data, general_metrics, city_names)
         st.plotly_chart(fig, use_container_width=True)
 
     # Onglet emploi
@@ -513,15 +554,13 @@ try:
             "Entreprises actives fin 2022": ("Total des ets actifs fin 2022", ""),
             "Chômeurs 15-64 ans": ("Chômeurs 15-64 ans en 2021", "")
         }
-        col_left, col_right = st.columns(2)
-
-        with col_left:
-            display_metrics(data_1, ville_1, emploi_metrics)
-
-        with col_right:
-            display_metrics(data_2, ville_2, emploi_metrics)
-
-        fig = create_comparison_graph(data_1, data_2, emploi_metrics, ville_1, ville_2)
+        
+        cols = st.columns(st.session_state.num_cities)
+        for i, (col, data, name) in enumerate(zip(cols, city_data, city_names)):
+            with col:
+                display_metrics(data, name, emploi_metrics)
+        
+        fig = create_comparison_graph(city_data, emploi_metrics, city_names)
         st.plotly_chart(fig, use_container_width=True)
 
     # Onglet logement
@@ -533,66 +572,53 @@ try:
             "Résidences principales en 2021": ("Résidences principales en 2021", ""),
             "Logements vacants en 2021": ("Logements vacants en 2021", "")
         }
-        col_left, col_right = st.columns(2)
-
-        with col_left:
-            display_metrics(data_1, ville_1, logement_metrics)
-
-        with col_right:
-            display_metrics(data_2, ville_2, logement_metrics)
-
-        fig = create_comparison_graph(data_1, data_2, logement_metrics, ville_1, ville_2)
+        
+        cols = st.columns(st.session_state.num_cities)
+        for i, (col, data, name) in enumerate(zip(cols, city_data, city_names)):
+            with col:
+                display_metrics(data, name, logement_metrics)
+        
+        fig = create_comparison_graph(city_data, logement_metrics, city_names)
         st.plotly_chart(fig, use_container_width=True)
 
     # Onglet météo
     with onglet_meteo:
         st.subheader("🌤️ Météo")
 
-        col_left, col_right = st.columns(2)
-
-        with col_left:
-            if "latitude" in data_1 and "longitude" in data_1:
-                get_weather(data_1['latitude'], data_1['longitude'])
-            else:
-                st.warning("Données géographiques manquantes pour cette ville.")
-
-        with col_right:
-            if "latitude" in data_2 and "longitude" in data_2:
-                get_weather(data_2['latitude'], data_2['longitude'])
-            else:
-                st.warning("Données géographiques manquantes pour cette ville.")
+        cols = st.columns(st.session_state.num_cities)
+        for i, (col, data, name) in enumerate(zip(cols, city_data, city_names)):
+            with col:
+                if "latitude" in data and "longitude" in data:
+                    get_weather(data['latitude'], data['longitude'])
+                else:
+                    st.warning("Données géographiques manquantes pour cette ville.")
 
     # Onglet points d'intérêt
     with onglet_poi:
         st.subheader("📍 Points d'intérêt")
-        col_left, col_right = st.columns(2)
+        
+        cols = st.columns(st.session_state.num_cities)
+        for i, (col, data, name) in enumerate(zip(cols, city_data, city_names)):
+            with col:
+                display_poi(name, data)
 
-        with col_left:
-            display_poi(ville_1, data_1)
-
-        with col_right:
-            display_poi(ville_2, data_2)
-
+    # Onglet formation
     with onglet_formation:
         st.subheader("🎓 Formation")
-        col_left, col_right = st.columns(2)
-
-        with col_left:
-            display_formation(ville_1, data_1, df_etablissement)
-
-        with col_right:
-            display_formation(ville_2, data_2, df_etablissement)
+        
+        cols = st.columns(st.session_state.num_cities)
+        for i, (col, data, name) in enumerate(zip(cols, city_data, city_names)):
+            with col:
+                display_formation(name, data, df_etablissement)
 
     # Onglet sécurité
     with onglet_securite:
         st.subheader("🚨 Sécurité")
-        col_left, col_right = st.columns(2)
-
-        with col_left:
-            display_security_poi(ville_1, data_1)
-
-        with col_right:
-            display_security_poi(ville_2, data_2)
+        
+        cols = st.columns(st.session_state.num_cities)
+        for i, (col, data, name) in enumerate(zip(cols, city_data, city_names)):
+            with col:
+                display_security_poi(name, data)
 
 except FileNotFoundError:
     st.error("❌ Fichier non trouvé : data/data_final.xlsx ou data/etablissement.csv")
