@@ -100,6 +100,9 @@ def get_weather(lat, lon):
             wind_speed = sum(f['wind']['speed'] for f in forecasts) / len(forecasts)  # Moyenne des vitesses du vent sur la journée en m/s
             wind_speed_kmh = wind_speed * 3.6  # Conversion m/s en km/h
 
+            avg_humidity = round(sum(f['main']['humidity'] for f in forecasts) / len(forecasts))  # Moyenne de l'humidité
+            avg_pressure = round(sum(f['main']['pressure'] for f in forecasts) / len(forecasts))  # Moyenne de la pression
+
             # Emoji correspondant à la condition météorologique
             weather_emojis = {
                 "Clear": "☀️",
@@ -130,13 +133,18 @@ def get_weather(lat, lon):
             # Si c'est aujourd'hui, affiche la température actuelle
             if current_temp is not None:
                 wind_speed = forecasts[0]['wind']['speed']  # Vitesse du vent en m/s
-                col3.markdown(f"🌡️ Température actuelle : **{current_temp}°C**  \n{emoji} **{condition_majoritaire_fr}**  \n💨 Vent : **{wind_speed_kmh:.1f} km/h**")
+                col3.markdown(f"🌡️ Température actuelle : **{current_temp}°C**  \n{emoji} **{condition_majoritaire_fr}**")
             else:
-                col3.markdown(f"🌡️ Max : **{temp_max}°C**  \n❄️ Min : **{temp_min}°C**  \n{emoji} **{condition_majoritaire_fr}**  \n💨 Vent : **{wind_speed_kmh:.1f} km/h**")
+                col3.markdown(f"🔼 Max : **{temp_max}°C**  \n🔽 Min : **{temp_min}°C**  \n{emoji} **{condition_majoritaire_fr}**")
 
 
             # Détail graphique avec bouton
-            with st.expander("📊 Voir le détail"):
+            with st.expander("➕ Détails"):
+                col1, col2, col3 = st.columns(3)
+                col1.markdown(f"💨 Vent : **{wind_speed_kmh:.1f} km/h**")
+                col2.markdown(f"💧 Humidité : **{avg_humidity}%**")
+                col3.markdown(f"🌡️ Pression : **{avg_pressure} hPa**")
+
                 heures = [pd.to_datetime(f['dt_txt']).strftime('%H:%M') for f in forecasts]
                 temp_h = [round(f['main']['temp']) for f in forecasts]  # Arrondir la température
 
