@@ -351,7 +351,16 @@ def display_poi(city_name, data):
     # Sélecteur pour les points d'intérêt
     poi_options = st.multiselect(
         "Sélectionnez les points d'intérêt à afficher :",
-        ["Gares", "Musées", "Restaurants", "Centres sportifs", "Sécurité"],
+        [
+            "Gares", 
+            "Musées", 
+            "Restaurants", 
+            "Centres sportifs", 
+            "Cinémas et Théâtres", 
+            "Banques et Distributeurs", 
+            "Hôpitaux et Cliniques", 
+            "Sécurité"
+        ],
         key=f"poi_{city_name}"
     )
 
@@ -368,16 +377,25 @@ def display_poi(city_name, data):
         # Récupérer et afficher les points d'intérêt
         bbox = f"{data['latitude']-0.1},{data['longitude']-0.1},{data['latitude']+0.1},{data['longitude']+0.1}"
         if "Gares" in poi_options:
-            display_poi_on_map(m, bbox, "railway", "station", "green")
+            display_poi_on_map(m, bbox, "railway", "station", "cadetblue")
         if "Musées" in poi_options:
             display_poi_on_map(m, bbox, "tourism", "museum", "purple")
         if "Restaurants" in poi_options:
             display_poi_on_map(m, bbox, "amenity", "restaurant", "orange")
         if "Centres sportifs" in poi_options:
-            display_poi_on_map(m, bbox, "leisure", "sports_centre", "red") 
+            display_poi_on_map(m, bbox, "leisure", "sports_centre", "green")
+        if "Cinémas et Théâtres" in poi_options:
+            display_poi_on_map(m, bbox, "amenity", "cinema", "red")
+            display_poi_on_map(m, bbox, "amenity", "theatre", "darkpurple")
+        if "Banques et Distributeurs" in poi_options:
+            display_poi_on_map(m, bbox, "amenity", "bank", "gray")
+            display_poi_on_map(m, bbox, "amenity", "atm", "lightgray")
+        if "Hôpitaux et Cliniques" in poi_options:
+            display_poi_on_map(m, bbox, "amenity", "hospital", "pink")
+            display_poi_on_map(m, bbox, "amenity", "clinic", "lightred")
         if "Sécurité" in poi_options:
-            display_poi_on_map(m, bbox, "amenity", "police", "darkred")
-            display_poi_on_map(m, bbox, "amenity", "fire_station", "darkblue")
+            display_poi_on_map(m, bbox, "amenity", "police", "darkblue")
+            display_poi_on_map(m, bbox, "amenity", "fire_station", "darkred")
 
         st_folium(m, width=700, height=400)
     else:
@@ -471,7 +489,7 @@ try:
     with city_selectors:
         # Calculer les largeurs des colonnes pour les sélecteurs et les boutons
         # Les boutons prennent moins d'espace que les sélecteurs
-        col_widths = [1] * st.session_state.num_cities + [0.15, 0.15]  # Ajout d'une colonne pour le bouton -
+        col_widths = [1] * st.session_state.num_cities + [0.1, 0.1]  # Ajout d'une colonne pour le bouton -
         cols = st.columns(col_widths)
         
         # Ajout des sélecteurs de villes
@@ -489,7 +507,7 @@ try:
         # Bouton + à côté des sélecteurs
         with cols[-2]:
             # Ajouter un espace pour aligner le bouton verticalement avec les sélecteurs
-            st.write("")
+            st.markdown("<br>", unsafe_allow_html=True)
             if st.button("➕", key="add_city_button", help="Ajouter une ville supplémentaire à comparer"):
                 if st.session_state.num_cities < 4:  # Limite à 5 villes pour éviter les problèmes d'affichage
                     st.session_state.num_cities += 1
@@ -497,7 +515,7 @@ try:
         
         # Bouton - à côté du bouton +
         with cols[-1]:
-            st.write("")
+            st.markdown("<br>", unsafe_allow_html=True)
             if st.button("➖", key="remove_city_button", help="Enlever une ville de la comparaison"):
                 if st.session_state.num_cities > 2:  # Garder au moins 2 villes pour la comparaison
                     st.session_state.num_cities -= 1
@@ -549,7 +567,7 @@ try:
         for i, (col, data, name) in enumerate(zip(cols, city_data, city_names)):
             with col:
                 display_metrics(data, name, emploi_metrics)
-        
+
         fig = create_comparison_graph(city_data, emploi_metrics, city_names)
         st.plotly_chart(fig, use_container_width=True)
 
