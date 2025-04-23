@@ -255,19 +255,22 @@ def get_population_by_insee(insee_code):
         return None
 
 # Vérifier si les coordonnées manquent et les récupérer si nécessaire
-def update_coordinates(data, city_name):
-    if pd.isna(data['longitude']) or pd.isna(data['latitude']):
-        latitude, longitude = get_coordinates(city_name)
-        if latitude is not None and longitude is not None:
-            data['latitude'] = latitude
-            data['longitude'] = longitude
+def update_coordinates(df, city_name):
+    row_index = df[df["Libellé commune ou ARM"] == city_name].index
+    if not row_index.empty:
+        row_index = row_index[0]
+        if pd.isna(df.at[row_index, 'longitude']) or pd.isna(df.at[row_index, 'latitude']):
+            latitude, longitude = get_coordinates(city_name)
+            if latitude is not None and longitude is not None:
+                df.at[row_index, 'latitude'] = latitude
+                df.at[row_index, 'longitude'] = longitude
 
-    # Mettre à jour la population
-    if 'code_commune_INSEE' in data:
-        insee_code = data['code_commune_INSEE']
-        population_data = get_population_by_insee(insee_code)
-        if population_data and 'population' in population_data:
-            data['Population'] = population_data['population']
+        # Vérifier et mettre à jour la population
+        if 'code_commune_INSEE' in df.columns:
+            insee_code = df.at[row_index, 'code_commune_INSEE']
+            population_data = get_population_by_insee(insee_code)
+            if population_data and 'population' in population_data:
+                df.at[row_index, 'Population'] = population_data['population']
 
 def create_comparison_graph(city_data_list, metrics, city_names):
     """
@@ -500,9 +503,13 @@ try:
             with cols[i]:
                 index = min(i, len(villes)-1)  # Pour éviter l'erreur d'index
                 selected_city = st.selectbox(f"{i+1}️⃣ Ville {i+1}", villes, index=index, key=f"city_{i}")
+                
+                # Mettre à jour les coordonnées dans le DataFrame principal
+                update_coordinates(df, selected_city)
+                
+                # Récupérer les données mises à jour pour la ville sélectionnée
                 city_data.append(df[df["Libellé commune ou ARM"] == selected_city].squeeze())
                 city_names.append(selected_city)
-                update_coordinates(city_data[i], city_names[i])
         
         # Bouton + à côté des sélecteurs
         with cols[-2]:
