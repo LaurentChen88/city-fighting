@@ -536,11 +536,11 @@ try:
         st.subheader("🔍 Données générales")
 
         general_metrics = {
-            "Population": ("Population", ""),
+            "Population (2022)": ("Population", ""),
             "Superficie": ("Superficie", "km²"),
-            "Niveau de vie médian": ("Médiane du niveau vie en 2021", "€"),
-            "Naissances domiciliées en 2023": ("Nombre de naissances domiciliées en 2023", ""),
-            "Décès domiciliés en 2023": ("Nombre de décès domiciliés en 2023", "")
+            "Niveau de vie médian (2021)": ("Médiane du niveau vie en 2021", "€"),
+            "Naissances domiciliées (2023)": ("Nombre de naissances domiciliées en 2023", ""),
+            "Décès domiciliés (2023)": ("Nombre de décès domiciliés en 2023", "")
         }
         
         # Créer des colonnes en fonction du nombre de villes
@@ -558,7 +558,7 @@ try:
         st.subheader("💼 Emploi")
 
         emploi_metrics = {
-            "Emplois en 2021": ("Emplois au LT en 2021", ""),
+            "Emplois (2021)": ("Emplois au LT en 2021", ""),
             "Entreprises actives fin 2022": ("Total des ets actifs fin 2022", ""),
             "Chômeurs 15-64 ans": ("Chômeurs 15-64 ans en 2021", "")
         }
@@ -576,9 +576,9 @@ try:
         st.subheader("🏠 Logement")
 
         logement_metrics = {
-            "Logements en 2021": ("Logements en 2021", ""),
-            "Résidences principales en 2021": ("Résidences principales en 2021", ""),
-            "Logements vacants en 2021": ("Logements vacants en 2021", "")
+            "Logements (2021)": ("Logements en 2021", ""),
+            "Résidences principales (2021)": ("Résidences principales en 2021", ""),
+            "Logements vacants (2021)": ("Logements vacants en 2021", "")
         }
         
         cols = st.columns(st.session_state.num_cities)
