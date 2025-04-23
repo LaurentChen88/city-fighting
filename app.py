@@ -351,7 +351,7 @@ def display_poi(city_name, data):
     # Sélecteur pour les points d'intérêt
     poi_options = st.multiselect(
         "Sélectionnez les points d'intérêt à afficher :",
-        ["Gares", "Musées", "Restaurants", "Centres sportifs"],
+        ["Gares", "Musées", "Restaurants", "Centres sportifs", "Sécurité"],
         key=f"poi_{city_name}"
     )
 
@@ -375,6 +375,9 @@ def display_poi(city_name, data):
             display_poi_on_map(m, bbox, "amenity", "restaurant", "orange")
         if "Centres sportifs" in poi_options:
             display_poi_on_map(m, bbox, "leisure", "sports_centre", "red") 
+        if "Sécurité" in poi_options:
+            display_poi_on_map(m, bbox, "amenity", "police", "darkred")
+            display_poi_on_map(m, bbox, "amenity", "fire_station", "darkblue")
 
         st_folium(m, width=700, height=400)
     else:
@@ -430,31 +433,11 @@ def display_formation(city_name, data, df_etablissement):
     else:
         st.warning("Aucune école trouvée pour cette ville.")
 
-    # Afficher le tableau des écoles
-    st.dataframe(ecoles, key=f"table_{city_name}")
+    # Afficher le tableau des écoles avec des colonnes spécifiques
+    colonnes_a_afficher = ['libellé', 'nom court', "secteur d'établissement", 'Région', 'Page Wikipédia en français']
+    ecoles_reduites = ecoles[colonnes_a_afficher] if not ecoles.empty else pd.DataFrame(columns=colonnes_a_afficher)
+    st.dataframe(ecoles_reduites.reset_index(drop=True), key=f"table_{city_name}")
 
-# Fonction pour afficher les postes de police et de pompiers
-def display_security_poi(city_name, data):
-    st.markdown(f"### {city_name}")
-
-    # Afficher la carte
-    if "latitude" in data and "longitude" in data:
-        m = folium.Map(location=[data["latitude"], data["longitude"]], zoom_start=12)
-        folium.Marker(
-            location=[data["latitude"], data["longitude"]],
-            popup=city_name,
-            tooltip=city_name,
-            icon=folium.Icon(color="blue")
-        ).add_to(m)
-
-        # Récupérer et afficher les postes de police et de pompiers
-        bbox = f"{data['latitude']-0.1},{data['longitude']-0.1},{data['latitude']+0.1},{data['longitude']+0.1}"
-        display_poi_on_map(m, bbox, "amenity", "police", "red")
-        display_poi_on_map(m, bbox, "amenity", "fire_station", "darkred")
-
-        st_folium(m, width=700, height=400)
-    else:
-        st.warning("Données géographiques manquantes pour cette ville.")
 
 # Début de l'application
 try:
@@ -521,14 +504,13 @@ try:
                     st.rerun()  # Utilisation de st.rerun() au lieu de st.experimental_rerun()
 
     # Onglets
-    onglet_general, onglet_emploi, onglet_logement, onglet_meteo, onglet_poi, onglet_formation, onglet_securite = st.tabs([
+    onglet_general, onglet_emploi, onglet_logement, onglet_meteo, onglet_poi, onglet_formation = st.tabs([
         f"🔍 Données générales",
         "💼 Emploi",
         "🏠 Logement",
         "🌤️ Météo",
         "📍 Points d'intérêt",
-        "🎓 Formation",
-        "🚨 Sécurité"
+        "🎓 Formation"
     ])
 
     # Onglet général
@@ -619,14 +601,6 @@ try:
             with col:
                 display_formation(name, data, df_etablissement)
 
-    # Onglet sécurité
-    with onglet_securite:
-        st.subheader("🚨 Sécurité")
-        
-        cols = st.columns(st.session_state.num_cities)
-        for i, (col, data, name) in enumerate(zip(cols, city_data, city_names)):
-            with col:
-                display_security_poi(name, data)
 
 except FileNotFoundError:
     st.error("❌ Fichier non trouvé : data/data_final.xlsx ou data/etablissement.csv")
