@@ -527,6 +527,19 @@ def display_seasonal_weather(city_name, latitude, longitude):
     plt.tight_layout()
     st.pyplot(plt)
 
+# Fonction pour afficher le classement des villes en fonction d'une variable
+def display_ranking(df, variable):
+    st.subheader(f"Classement des villes par {variable}")
+
+    # Trier les données par la variable sélectionnée
+    sorted_df = df.sort_values(by=variable, ascending=False)
+
+    # Limiter à 10 lignes
+    top_10_df = sorted_df.head(10)
+
+    # Afficher le tableau des villes classées
+    st.dataframe(top_10_df[['Libellé commune ou ARM', variable]].reset_index(drop=True))
+
 # Début de l'application
 try:
     df = load_data(file_path)
@@ -596,13 +609,14 @@ try:
                     st.rerun()  # Utilisation de st.rerun() au lieu de st.experimental_rerun()
 
     # Onglets
-    onglet_general, onglet_emploi, onglet_logement, onglet_meteo, onglet_poi, onglet_formation, onglet_created_by = st.tabs([
+    onglet_general, onglet_emploi, onglet_logement, onglet_meteo, onglet_poi, onglet_formation, onglet_ranking, onglet_created_by = st.tabs([
         f"🔍 Données générales",
         "💼 Emploi",
         "🏠 Logement",
         "🌤️ Météo",
         "📍 Points d'intérêt",
         "🎓 Formation",
+        "🏆 Classement",
         "👥 A propos"
     ])
 
@@ -733,6 +747,24 @@ try:
         for i, (col, data, name) in enumerate(zip(cols, city_data, city_names)):
             with col:
                 display_formation(name, data, df_etablissement)
+
+    # Onglet classement
+    with onglet_ranking:
+        st.subheader("🏆 Classement des villes")
+
+        # Filtrer les colonnes pertinentes pour le classement
+        relevant_columns = [
+            "Population", "Superficie", "Médiane du niveau vie en 2021",
+            "Nombre de naissances domiciliées en 2023", "Nombre de décès domiciliés en 2023",
+            "Emplois au LT en 2021", "Total des ets actifs fin 2022", "Chômeurs 15-64 ans en 2021",
+            "Logements en 2021", "Résidences principales en 2021", "Logements vacants en 2021"
+        ]
+
+        # Sélecteur pour choisir la variable à classer
+        variable = st.selectbox("Choisissez une variable pour le classement :", relevant_columns)
+
+        # Afficher le classement
+        display_ranking(df, variable)
 
     # Onglet "Créé par"
     with onglet_created_by:
