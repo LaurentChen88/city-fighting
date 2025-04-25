@@ -960,6 +960,7 @@ try:
                 <ul style="color: #555; line-height: 1.6;">
                     <li>🌍 <strong>Population</strong> : <a href="https://geo.api.gouv.fr" target="_blank">geo.api.gouv.fr</a></li>
                     <li>📊 <strong>Données générales, emploi, logement, formation</strong> : <a href="https://data.gouv.fr" target="_blank">data.gouv.fr</a></li>
+                    <li>💼 <strong>Offres d'emploi</strong> : <a href="https://www.data.gouv.fr/fr/dataservices/api-offres-demploi/" target="_blank">data.gouv.fr</a></li>
                     <li>☁️ <strong>Météo</strong> : <a href="https://openweathermap.org" target="_blank">API OpenWeatherMap</a> et <a href="https://meteostat.net" target="_blank">meteostat.net</a></li>
                     <li>📍 <strong>Points d'intérêt</strong> : <a href="https://overpass-api.de" target="_blank">API Overpass</a></li>
                 </ul>
