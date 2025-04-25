@@ -519,6 +519,9 @@ def display_seasonal_weather(city_name, latitude, longitude):
         plt.plot(seasonal_avg.index, seasonal_avg[season], label=season)
         plt.axhline(seasonal_means[season], linestyle='--', label=f'{season} moyenne ({seasonal_means[season]:.1f}°C)')
 
+    # Fixer l'échelle de l'axe Y
+    plt.ylim(-5, 30)  # Exemple : de -5°C à 30°C
+
     plt.title(f"Évolution des températures saisonnières à {city_name} (1990–2020)")
     plt.xlabel("Année")
     plt.ylabel("Température moyenne (°C)")
@@ -527,18 +530,62 @@ def display_seasonal_weather(city_name, latitude, longitude):
     plt.tight_layout()
     st.pyplot(plt)
 
-# Fonction pour afficher le classement des villes en fonction d'une variable
-def display_ranking(df, variable):
-    st.subheader(f"Classement des villes par {variable}")
 
-    # Trier les données par la variable sélectionnée
-    sorted_df = df.sort_values(by=variable, ascending=False)
+def format_date(date_str):
+    try:
+        dt = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+        return dt.strftime("%d/%m/%Y %H:%M")
+    except:
+        return "Date invalide"
 
-    # Limiter à 10 lignes
-    top_10_df = sorted_df.head(10)
+# --- Étape 1 : Récupérer dynamiquement le token ---
+def get_access_token(client_id, client_secret):
+    url = "https://entreprise.pole-emploi.fr/connexion/oauth2/access_token?realm=/partenaire"
+    headers = {
+        "Content-Type": "application/x-www-form-urlencoded"
+    }
+    data = {
+        "grant_type": "client_credentials",
+        "client_id": client_id,
+        "client_secret": client_secret,
+        "scope": "api_offresdemploiv2 o2dsoffre"
+    }
+    response = requests.post(url, headers=headers, data=data)
+    if response.status_code == 200:
+        return response.json().get("access_token")
+    else:
+        st.error(f"Erreur lors de la récupération du token : {response.status_code} - {response.text}")
+        return None
 
-    # Afficher le tableau des villes classées
-    st.dataframe(top_10_df[['Libellé commune ou ARM', variable]].reset_index(drop=True))
+# --- Étape 2 : Appeler l'API des offres ---
+def get_job_offers(query, departement, access_token, type_contrat=None, publiee_depuis=None):
+    url = "https://api.francetravail.io/partenaire/offresdemploi/v2/offres/search"
+    headers = {
+        'Authorization': f'Bearer {access_token}'
+    }
+    params = {
+        'motsCles': query,
+        'departement': departement,
+        "distance": 0,
+        'page': 1,
+        'limit': 10
+    }
+    if type_contrat:
+        params["typeContrat"] = type_contrat
+    if publiee_depuis is not None:
+        params["publieeDepuis"] = publiee_depuis
+
+    response = requests.get(url, headers=headers, params=params)
+    if response.status_code == 200:
+        return response.json()
+    elif response.status_code == 204:
+        # Aucun contenu trouvé
+        return None
+    else:
+        st.error(f"Erreur {response.status_code} : {response.text}")
+        return None
+
+
 
 # Début de l'application
 try:
@@ -609,15 +656,14 @@ try:
                     st.rerun()  # Utilisation de st.rerun() au lieu de st.experimental_rerun()
 
     # Onglets
-    onglet_general, onglet_emploi, onglet_logement, onglet_meteo, onglet_poi, onglet_formation, onglet_ranking, onglet_created_by = st.tabs([
+    onglet_general, onglet_emploi, onglet_logement, onglet_meteo, onglet_poi, onglet_formation, onglet_created_by = st.tabs([
         f"🔍 Données générales",
         "💼 Emploi",
         "🏠 Logement",
         "🌤️ Météo",
         "📍 Points d'intérêt",
         "🎓 Formation",
-        "🏆 Classement",
-        "👥 A propos"
+        "ℹ️ A propos"
     ])
 
     # Onglet général
@@ -659,6 +705,82 @@ try:
 
         fig = create_comparison_graph(city_data, emploi_metrics, city_names)
         st.plotly_chart(fig, use_container_width=True)
+
+        ###### RECHERCHE D'EMPLOI ######
+        st.subheader("Recherche d'offres d'emploi - France Travail")
+
+        query = st.text_input("Poste recherché", "Data Analyst")
+
+        # Renseigne ici tes propres identifiants
+        client_id = st.secrets.get("client_id", "PAR_outildecisionnel_54f7361a496d42854e4356df6568a5346eba4b9468c9b0067add09ba9f318a4c")
+        client_secret = st.secrets.get("client_secret", "0c1a9a6ed2afcc5f1a730e0a1a747dfc8cd81d039ec95005f851bac1e206d216")
+
+        type_contrat = st.selectbox(
+            "Type de contrat",
+            options=["", "CDI", "CDD", "MIS", "SAI", "LIB", "AUTRE"],
+            format_func=lambda x: "Tous les types" if x == "" else x
+        )
+
+        publiee_depuis = st.selectbox(
+            "Afficher les offres publiées depuis :",
+            options=[1, 3, 7, 14, 31],
+            index=2,  # valeur par défaut : 7 jours
+            format_func=lambda x: f"{x} jour{'s' if x > 1 else ''}"
+        )
+
+
+        if st.button("Rechercher"):
+            access_token = get_access_token(client_id, client_secret)
+
+            if access_token:
+                cols = st.columns(st.session_state.num_cities)
+                for i, (col, data, name) in enumerate(zip(cols, city_data, city_names)):
+                    with col:
+                        st.markdown(f"### Offres d'emploi pour {name}")
+                        departement = data.get("Département")
+
+                        job_offers = get_job_offers(query, departement, access_token, type_contrat, publiee_depuis)
+
+                        if job_offers:
+                            jobs = job_offers.get('resultats', [])
+                            if jobs:
+                                # Traitement léger des données pour affichage
+                                for job in jobs:
+                                    st.subheader(job.get("intitule", ""))
+                                    st.markdown(f"**🏢 Entreprise** : {job.get('entreprise', {}).get('nom', 'N/A')}")
+                                    st.markdown(f"**📍 Lieu** : {job.get('lieuTravail', {}).get('libelle', 'N/A')}")
+
+                                    date = job.get("dateCreation")
+                                    if date is not None:
+                                        st.markdown(f"**📅 Publiée le** : {format_date(date)}")
+
+                                    secteur = job.get("secteurActiviteLibelle")
+                                    if secteur:
+                                        st.markdown(f"**🏭 Secteur d'activité** : {secteur}")
+
+                                    contrat = job.get("typeContrat")
+                                    if contrat:
+                                        st.markdown(f"**📄 Contrat** : {contrat}")
+
+                                    salaire = job.get("salaire")
+                                    if salaire:
+                                        salaire_libelle = salaire.get("libelle")
+                                        st.markdown(f"**💰 Salaire** : {salaire_libelle}")
+                                    else:
+                                        st.markdown("**💰 Salaire** : Non précisé")
+
+                                    lien = job.get("origineOffre", {}).get("urlOrigine")
+                                    if lien:
+                                        st.markdown(f"[🔗 Voir l'offre]({lien})")
+                                    else:
+                                        st.markdown("*Lien non disponible*")
+
+                                    st.write("---")
+                            else:
+                                st.warning(f"Aucune offre d'emploi trouvée pour {name}.")
+                        else:
+                            st.warning(f"Aucune offre d'emploi trouvée pour {name}.")  
+
 
     # Onglet logement
     with onglet_logement:
@@ -748,86 +870,101 @@ try:
             with col:
                 display_formation(name, data, df_etablissement)
 
-    # Onglet classement
-    with onglet_ranking:
-        st.subheader("🏆 Classement des villes")
-
-        # Filtrer les colonnes pertinentes pour le classement
-        relevant_columns = [
-            "Population", "Superficie", "Médiane du niveau vie en 2021",
-            "Nombre de naissances domiciliées en 2023", "Nombre de décès domiciliés en 2023",
-            "Emplois au LT en 2021", "Total des ets actifs fin 2022", "Chômeurs 15-64 ans en 2021",
-            "Logements en 2021", "Résidences principales en 2021", "Logements vacants en 2021"
-        ]
-
-        # Sélecteur pour choisir la variable à classer
-        variable = st.selectbox("Choisissez une variable pour le classement :", relevant_columns)
-
-        # Afficher le classement
-        display_ranking(df, variable)
-
     # Onglet "Créé par"
     with onglet_created_by:
-        st.subheader("👥 Créé par")
-
-        st.markdown("""
-        <style>
-        .member {
-            display: flex;
-            align-items: center;
-            margin-bottom: 20px;
-        }
-        .member img {
-            border-radius: 50%;
-            margin-right: 15px;
-        }
-        .member h3 {
-            margin: 0;
-        }
-        .member p {
-            margin: 5px 0 0 0;
-            font-size: 14px;
-            color: #555;
-        }
-        </style>
-        """, unsafe_allow_html=True)
-
+        st.subheader("ℹ️ A propos")
+        st.markdown(f"### Contributeurs")
         members = [
             {
-                "name": "Thomas Belaid",
-                "role": "Développeur",
-                "email": "thomas.belaid.pro@gmail.com",
+                "image": "static/images/thomas-img.jpg",
+                "name": "Thomas BELAID",
                 "linkedin": "https://www.linkedin.com/in/thomas-belaid-6a4095250/",
-                "location": "Montreuil",
-                "icon": "👨‍💻"
+                "portfolio": "https://thomaassb.github.io/PortFolio-TB.github.io/",
+                "github": "https://github.com/ThomaasSB"
             },
             {
-                "name": "Laurent Chen",
-                "role": "Développeur",
+                "image": "static/images/laurent-img.jpg",
+                "name": "Laurent CHEN",
                 "linkedin": "https://www.linkedin.com/in/laurent-chen8/",
-                "icon": "👨‍💻"
+                "portfolio": "https://laurentchen88.github.io/portfolio/",
+                "github": "https://github.com/LaurentChen88"
             },
             {
-                "name": "Mohammed Boukouiren",
-                "role": "Développeur",
+                "image": "static/images/mohammed-img.jpg",
+                "name": "Mohammed BOUKOUIREN",
                 "linkedin": "https://www.linkedin.com/in/mohammed-boukouiren/",
-                "icon": "👨‍💻"
+                "github": "https://github.com/2mow"
             }
         ]
+        
+        cols = st.columns(len(members))
 
-        for member in members:
-            st.markdown(f"""
-            <div class="member">
-                <div style="font-size: 48px;">{member['icon']}</div>
-                <div>
-                    <h3>{member['name']}</h3>
-                    <p>{member['role']}</p>
-                    <p><a href="{member['linkedin']}">LinkedIn</a></p>
-                    {"<p><a href='mailto:{0}'>{0}</a></p>".format(member['email']) if 'email' in member else ""}
-                    {"<p>{0}</p>".format(member['location']) if 'location' in member else ""}
-                </div>
+        # CSS pour styliser les boutons
+        st.markdown("""
+            <style>
+            .button, .button:link, .button:visited, .button:hover, .button:active {
+                display: inline-block;
+                padding: 10px 20px;
+                margin: 5px 0;
+                font-size: 14px;
+                font-weight: bold;
+                color: white !important;
+                text-align: center;
+                text-decoration: none !important;
+                border-radius: 5px;
+            }
+            .portfolio {
+                background-color: #4CAF50;
+            }
+            .button:hover {
+                opacity: 0.8;
+            }
+            </style>
+        """, unsafe_allow_html=True)
+
+        
+
+        for col, member in zip(cols, members):
+            with col:
+                # Afficher l'image
+                st.image(member['image'], width=150, caption=member['name'])
+                
+                # Logos LinkedIn, GitHub et Portfolio
+                st.markdown(f"""
+                    <div style="display: flex; gap: 10px; margin: 0 0 25px 20px;">
+                        <a href="{member['linkedin']}" target="_blank">
+                            <img src="https://cdn-icons-png.flaticon.com/512/174/174857.png" alt="LinkedIn" style="width: 32px; height: 32px;">
+                        </a>
+                        <a href="{member['github']}" target="_blank">
+                            <img src="https://cdn-icons-png.flaticon.com/512/25/25231.png" alt="GitHub" style="width: 32px; height: 32px;">
+                        </a>
+                        {"<a href='" + member['portfolio'] + "' target='_blank'><img src='https://cdn-icons-png.flaticon.com/512/1006/1006771.png' alt='Portfolio' style='width: 32px; height: 32px;'></a>" if 'portfolio' in member else ""}
+                    </div>
+                """, unsafe_allow_html=True)
+
+        # Section "Réalisé entre..."
+        st.markdown("""
+            <div style="margin-top: 20px; padding: 15px; background-color: #f9f9f9; border-radius: 10px; border: 1px solid #ddd;">
+                <h4 style="text-align: center; color: #333;">📅 Réalisé entre mars et avril 2025</h4>
+                <p style="text-align: center; color: #555;">
+                    Ce projet a été réalisé dans le cadre du projet outil décisionnel en fin de 3ème année en BUT Science des Données
+                    à l'IUT de Paris - Rives de Seine.
+                </p>
             </div>
-            """, unsafe_allow_html=True)
+        """, unsafe_allow_html=True)
+
+        # Section "Source de données"
+        st.markdown("""
+            <div style="margin-top: 20px; padding: 15px; background-color: #f9f9f9; border-radius: 10px; border: 1px solid #ddd;">
+                <h4 style="color: #333;">📚 Source de données</h4>
+                <ul style="color: #555; line-height: 1.6;">
+                    <li>🌍 <strong>Population</strong> : <a href="https://geo.api.gouv.fr" target="_blank">geo.api.gouv.fr</a></li>
+                    <li>📊 <strong>Données générales, emploi, logement, formation</strong> : <a href="https://data.gouv.fr" target="_blank">data.gouv.fr</a></li>
+                    <li>☁️ <strong>Météo</strong> : <a href="https://openweathermap.org" target="_blank">API OpenWeatherMap</a> et <a href="https://meteostat.net" target="_blank">meteostat.net</a></li>
+                    <li>📍 <strong>Points d'intérêt</strong> : <a href="https://overpass-api.de" target="_blank">API Overpass</a></li>
+                </ul>
+            </div>
+        """, unsafe_allow_html=True)
 
 except FileNotFoundError:
     st.error("❌ Fichier non trouvé : data/data_final.xlsx ou data/etablissement.csv")
