@@ -11,6 +11,7 @@ import plotly.graph_objects as go
 from datetime import datetime
 from meteostat import Point, Daily
 import matplotlib.pyplot as plt
+import os
 
 # Configuration de la page
 st.set_page_config(
