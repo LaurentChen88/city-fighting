@@ -713,7 +713,9 @@ try:
 
         # Renseigne ici tes propres identifiants
         client_id = st.secrets.get("client_id", "PAR_outildecisionnel_54f7361a496d42854e4356df6568a5346eba4b9468c9b0067add09ba9f318a4c")
+        CLIENT_ID = os.getenv('CLIENT_ID') 
         client_secret = st.secrets.get("client_secret", "0c1a9a6ed2afcc5f1a730e0a1a747dfc8cd81d039ec95005f851bac1e206d216")
+        CLIENT_SECRET = os.getenv('CLIENT_SECRET') 
 
         type_contrat = st.selectbox(
             "Type de contrat",
@@ -730,7 +732,7 @@ try:
 
 
         if st.button("Rechercher"):
-            access_token = get_access_token(client_id, client_secret)
+            access_token = get_access_token(CLIENT_ID, CLIENT_SECRET)
 
             if access_token:
                 cols = st.columns(st.session_state.num_cities)
